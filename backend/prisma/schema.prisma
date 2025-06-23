@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Appointment {
+  id            Int      @id @default(autoincrement())
+  patientId     Int?     // Making this optional for existing records
+  patient       Patient? @relation(fields: [patientId], references: [id])
+  patientName   String
+  patientPhone  String
+  patientVisibleId String?
+  date          DateTime
+  time          String
+  type          String   @default("Consultation")
+  duration      String   @default("30")
+  status        String   @default("Pending")
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([patientId])
+}
+
+model Patient {
+  id              Int       @id @default(autoincrement())
+  visibleId       String    @unique
+  name            String    @db.VarChar(100)
+  age             Int
+  gender          String    @db.VarChar(20)
+  phone           String    @db.VarChar(20)
+  email           String?   @db.VarChar(100)
+  condition       String?   @db.VarChar(200)
+  status          String    @default("Active") @db.VarChar(50)
+  allergies       String[]
+  lastVisit       DateTime?
+  abhaId          String?   @unique @db.VarChar(50)
+  abhaVerified    Boolean   @default(false)
+  emergencyContact String?  @db.VarChar(100)
+  emergencyPhone  String?   @db.VarChar(20)
+  address         String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  appointments    Appointment[]
+}
+
+
