@@ -71,7 +71,7 @@ const defaultSettings: AppointmentSettings = {
 // Auto-generate time slots based on working hours and duration
 const generateTimeSlots = (startTime: string, endTime: string, durationMinutes: number, breakStart: string, breakEnd: string) => {
   const slots: TimeSlot[] = [];
-  let currentTime = new Date(`2000-01-01 ${startTime}`);
+  const currentTime = new Date(`2000-01-01 ${startTime}`);
   const endDateTime = new Date(`2000-01-01 ${endTime}`);
   const breakStartTime = new Date(`2000-01-01 ${breakStart}`);
   const breakEndTime = new Date(`2000-01-01 ${breakEnd}`);
@@ -100,6 +100,18 @@ const generateTimeSlots = (startTime: string, endTime: string, durationMinutes: 
 
   return slots;
 };
+
+export interface Appointment {
+  id: number | string;
+  patientName: string;
+  patientPhone: string;
+  date: string; // ISO date string (YYYY-MM-DD)
+  time: string; // e.g. '09:00 AM'
+  type: string;
+  duration: string; // in minutes, as string
+  notes?: string;
+  status: string;
+}
 
 export const useAppointmentSettings = () => {
   const [settings, setSettings] = useState<AppointmentSettings>(defaultSettings);
@@ -130,9 +142,11 @@ export const useAppointmentSettings = () => {
       const response = await api.get("/appointment-settings");
       if (response.data) {
         setSettings(response.data);
+      } else {
+        // Show default settings for user guidance, but do NOT save to DB
+        setSettings(defaultSettings);
       }
     } catch (error) {
-      console.log("Using default appointment settings");
       setSettings(defaultSettings);
     } finally {
       setLoading(false);
@@ -161,7 +175,7 @@ export const useAppointmentSettings = () => {
     return settings.durations.filter(duration => duration.isActive);
   };
 
-  const getAvailableTimeSlots = (date: Date, existingAppointments: any[] = []) => {
+  const getAvailableTimeSlots = (date: Date, existingAppointments: Appointment[] = []) => {
     const activeSlots = getActiveTimeSlots();
     const dayOfWeek = date.getDay();
     
@@ -169,6 +183,14 @@ export const useAppointmentSettings = () => {
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       return [];
     }
+
+    // Filter appointments to only those for the selected date
+    const dateString = date.toISOString().split('T')[0];
+    const appointmentsForDate = existingAppointments.filter(app => {
+      // app.date is always a string (YYYY-MM-DD or ISO string)
+      const appDate = app.date.split('T')[0];
+      return appDate === dateString;
+    });
 
     // Filter out break time
     const breakStart = settings.breakTime.start;
@@ -198,7 +220,7 @@ export const useAppointmentSettings = () => {
 
       // Check for existing appointments if overlapping is not allowed
       if (!settings.allowOverlapping) {
-        const hasConflict = existingAppointments.some(appointment => {
+        const hasConflict = appointmentsForDate.some(appointment => {
           const appointmentTime = appointment.time;
           return appointmentTime === slotTime;
         });
@@ -242,7 +264,7 @@ export const useAppointmentSettings = () => {
     return `${displayHours}:${newMinutes.toString().padStart(2, '0')} ${newPeriod}`;
   };
 
-  const checkAppointmentConflict = (date: Date, startTime: string, durationMinutes: number, existingAppointments: any[] = []) => {
+  const checkAppointmentConflict = (date: Date, startTime: string, durationMinutes: number, existingAppointments: Appointment[] = []) => {
     if (settings.allowOverlapping) {
       return false;
     }
@@ -292,4 +314,4 @@ export const useAppointmentSettings = () => {
     checkAppointmentConflict,
     regenerateTimeSlots
   };
-}; 
+};

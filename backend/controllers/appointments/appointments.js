@@ -41,6 +41,7 @@ const getAppointment = async (req, res) => {
 const createAppointment = async (req, res) => {
   try {
     const {
+      patientId, // <-- new
       patientPhone,
       date,
       time,
@@ -50,34 +51,70 @@ const createAppointment = async (req, res) => {
       status = 'Pending'
     } = req.body;
 
-    // Find patient by phone number
-    const patient = await prisma.patient.findFirst({
-      where: { phone: patientPhone }
-    });
+    let patient = null;
+    if (patientId) {
+      // Try to find patient by ID
+      patient = await prisma.patient.findUnique({
+        where: { id: typeof patientId === 'string' ? parseInt(patientId) : patientId }
+      });
+    }
+    if (!patient) {
+      // Fallback: find by phone
+      patient = await prisma.patient.findFirst({
+        where: { phone: patientPhone }
+      });
+    }
 
     if (!patient) {
       return res.status(400).json({ error: "Patient not found. Please create the patient record first." });
     }
 
-    const appointment = await prisma.appointment.create({
-      data: {
-        patientName: patient.name,
-        patientPhone,
-        patientVisibleId: patient.visibleId,
-        date: new Date(date),
-        time,
-        type,
-        duration,
-        notes: notes || null,
-        status,
-        patientId: patient.id
-      }
-    });
+    // Validate: Prevent scheduling in the past (allow if slot's END time is in the future)
+    const appointmentDate = new Date(date);
+    // Parse time string (e.g., '10:30 AM') to set hours and minutes
+    let slotDurationMinutes = 30; // default fallback
+    if (duration) {
+      slotDurationMinutes = parseInt(duration);
+      if (isNaN(slotDurationMinutes)) slotDurationMinutes = 30;
+    }
+    if (time) {
+      const [timePart, period] = time.split(' ');
+      let [hours, minutes] = timePart.split(':').map(Number);
+      if (period === 'PM' && hours !== 12) hours += 12;
+      if (period === 'AM' && hours === 12) hours = 0;
+      appointmentDate.setHours(hours, minutes, 0, 0);
+    }
+    const slotEnd = new Date(appointmentDate.getTime() + slotDurationMinutes * 60000);
+    if (slotEnd < new Date()) {
+      return res.status(400).json({ error: 'Cannot schedule an appointment in the past.' });
+    }
 
-    // console.log('Created appointment:', appointment);
-    res.status(201).json(appointment);
+    try {
+      const appointment = await prisma.appointment.create({
+        data: {
+          patientName: patient.name,
+          patientPhone,
+          patientVisibleId: patient.visibleId,
+          date: new Date(date),
+          time,
+          type,
+          duration,
+          notes: notes || null,
+          status,
+          patientId: patient.id
+        }
+      });
+      res.status(201).json(appointment);
+    } catch (error) {
+      console.error(error); // Log the error for debugging
+      // Handle unique constraint violation (duplicate booking)
+      if (error.code === 'P2002' && error.meta && error.meta.target && error.meta.target.includes('date_time')) {
+        return res.status(409).json({ error: 'This time slot is already booked. Please select a different time.' });
+      }
+      // Fallback for other errors
+      return res.status(500).json({ error: 'Failed to create appointment' });
+    }
   } catch (error) {
-    // console.error('Error creating appointment:', error);
     res.status(500).json({ error: 'Failed to create appointment' });
   }
 };

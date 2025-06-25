@@ -31,6 +31,7 @@ model Appointment {
   updatedAt     DateTime @updatedAt
 
   @@index([patientId])
+  @@unique([date, time])
 }
 
 model Patient {
@@ -53,6 +54,25 @@ model Patient {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   appointments    Appointment[]
+}
+
+model AppointmentSettings {
+  id                   Int      @id @default(autoincrement())
+  workingHoursStart    String   // e.g. "08:00"
+  workingHoursEnd      String   // e.g. "18:00"
+  breakStart           String   // e.g. "12:00"
+  breakEnd             String   // e.g. "13:00"
+  durations            Json     // Array of { value: string, label: string, isActive: boolean }
+  appointmentTypes     String[] // e.g. ["Consultation", "Follow-up", ...]
+  maxAppointmentsPerDay Int     @default(50)
+  allowOverlapping     Boolean  @default(false)
+  bufferTime           Int      @default(15) // in minutes
+  advanceBookingDays   Int      @default(30)
+  autoGenerateSlots    Boolean  @default(true)
+  defaultDuration      String   @default("30")
+  timeSlots            Json     // Array of { id: string, time: string, isActive: boolean }
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,54 +13,110 @@ import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAppointmentSettings } from "@/hooks/use-appointment-settings";
-import PatientFormDialog from "@/components/patients/PatientFormDialog"; // For quick create
+import PatientFormDialog from "@/components/patients/PatientFormDialog";
 
-interface AppointmentDialogProps {
-  appointment?: any;
-  mode: 'create' | 'edit';
-  onSave: (appointmentData: any) => Promise<any> | void;
-  onClose?: () => void;
+// Types from hooks/use-appointment-settings.ts
+interface TimeSlot {
+  id: string;
+  time: string;
+  isActive: boolean;
 }
 
-const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDialogProps) => {
-  const [open, setOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    patientName: appointment?.patientName || "",
-    patientPhone: appointment?.patientPhone || "",
-    date: appointment?.date ? new Date(appointment.date) : new Date(),
-    time: appointment?.time || "",
-    duration: appointment?.duration || "30",
-    type: appointment?.type || "Consultation",
-    notes: appointment?.notes || ""
-  });
+interface AppointmentSettings {
+  timeSlots: TimeSlot[];
+  durations: { value: string; label: string; isActive: boolean }[];
+  workingHours: { start: string; end: string };
+  breakTime: { start: string; end: string };
+  appointmentTypes: string[];
+  maxAppointmentsPerDay: number;
+  allowOverlapping: boolean;
+  bufferTime: number;
+  advanceBookingDays: number;
+  autoGenerateSlots: boolean;
+  defaultDuration: string;
+}
+
+// Types from pages/Appointments.tsx
+export interface Appointment {
+  id: number | string;
+  patientName: string;
+  patientPhone: string;
+  date: string;
+  time: string;
+  type: string;
+  duration: string;
+  notes?: string;
+  status: string;
+  patientId?: string | number; // Added patientId for unique identification
+}
+
+interface Patient {
+  id: string | number;
+  name: string;
+  phone: string;
+  visibleId?: string;
+  age?: number;
+  gender?: string;
+}
+
+interface AppointmentDialogProps {
+  appointment?: Appointment;
+  mode: 'create' | 'edit';
+  onSave: (appointmentData: Appointment) => Promise<boolean | void> | void;
+  onClose?: () => void;
+  selectedDate?: string | Date;
+  selectedTime?: string;
+}
+
+interface AppointmentFormData {
+  patientName: string;
+  patientPhone: string;
+  date: Date;
+  time: string;
+  type: string;
+  notes: string;
+}
+
+const AppointmentDialog = ({ appointment, mode, onSave, onClose, selectedDate, selectedTime }: AppointmentDialogProps) => {
+  const [open, setOpen] = useState<boolean>(false);
+  const initialFormData = useMemo<AppointmentFormData>(() => ({
+    patientName: "",
+    patientPhone: "",
+    date: selectedDate ? (typeof selectedDate === 'string' ? new Date(selectedDate) : selectedDate) : new Date(),
+    time: selectedTime || "",
+    type: "Consultation",
+    notes: ""
+  }), [selectedDate, selectedTime]);
+  const [formData, setFormData] = useState<AppointmentFormData>(initialFormData);
   const { toast } = useToast();
   const [patientFound, setPatientFound] = useState<boolean | null>(null);
-  const [showCreatePatient, setShowCreatePatient] = useState(false);
-  const [matchingPatients, setMatchingPatients] = useState<any[]>([]);
+  const [showCreatePatient, setShowCreatePatient] = useState<boolean>(false);
+  const [matchingPatients, setMatchingPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-  const [existingAppointments, setExistingAppointments] = useState<any[]>([]);
+  const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
 
   // Use appointment settings hook
-  const { 
-    settings, 
-    loading: settingsLoading, 
-    getActiveTimeSlots, 
-    getActiveDurations, 
+  const {
+    settings,
+    loading: settingsLoading,
+    getActiveTimeSlots,
+    getActiveDurations,
     getAvailableTimeSlots,
     isWithinAdvanceBookingWindow,
     checkAppointmentConflict
   } = useAppointmentSettings();
 
-  // Get dynamic time slots and durations
-  const timeSlots = getActiveTimeSlots().map(slot => slot.time);
-  const durations = getActiveDurations();
-  const appointmentTypes = settings.appointmentTypes;
+  // Get dynamic time slots
+  const timeSlots: string[] = getActiveTimeSlots().map((slot: TimeSlot) => slot.time);
+  const slotDuration: number = parseInt(settings.defaultDuration);
+  const appointmentTypes: string[] = settings.appointmentTypes;
 
   // Load existing appointments for the selected date
   useEffect(() => {
     if (formData.date) {
       loadExistingAppointments();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.date]);
 
   const loadExistingAppointments = async () => {
@@ -75,23 +131,41 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
   };
 
   // Get available time slots for the selected date
-  const getAvailableSlots = () => {
+  const getAvailableSlots = (): string[] => {
     if (!formData.date) return timeSlots;
-    
-    const availableSlots = getAvailableTimeSlots(formData.date, existingAppointments);
-    return availableSlots.map(slot => slot.time);
+    let availableSlots = getAvailableTimeSlots(formData.date, existingAppointments).map((slot: TimeSlot) => slot.time);
+
+    // If the selected date is today, allow slot if its END time is in the future
+    const today = new Date();
+    const selectedDate = new Date(formData.date.getFullYear(), formData.date.getMonth(), formData.date.getDate());
+    const isToday = today.getFullYear() === selectedDate.getFullYear() &&
+                   today.getMonth() === selectedDate.getMonth() &&
+                   today.getDate() === selectedDate.getDate();
+    if (isToday) {
+      const now = today;
+      availableSlots = availableSlots.filter(time => {
+        // Parse time string (e.g., '10:30 AM') to a Date object on today
+        const [timePart, period] = time.split(' ');
+        let [hours, minutes] = timePart.split(':').map(Number);
+        if (period === 'PM' && hours !== 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+        const slotStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
+        const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
+        return slotEnd > now;
+      });
+    }
+    return availableSlots;
   };
 
   // Check if selected time slot is available
-  const isTimeSlotAvailable = (time: string) => {
+  const isTimeSlotAvailable = (time: string): boolean => {
     if (!formData.date) return true;
-    
     const availableSlots = getAvailableSlots();
     return availableSlots.includes(time);
   };
 
   // Check if date is within booking window
-  const isDateValid = (date: Date) => {
+  const isDateValid = (date: Date): boolean => {
     return isWithinAdvanceBookingWindow(date);
   };
 
@@ -112,7 +186,7 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
         } else if (Array.isArray(res.data) && res.data.length === 1) {
           setMatchingPatients([]);
           setFormData(prev => ({ ...prev, patientName: res.data[0].name }));
-          setSelectedPatientId(res.data[0].id);
+          setSelectedPatientId(String(res.data[0].id));
           setPatientFound(true);
           setShowCreatePatient(false);
         } else {
@@ -135,15 +209,23 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
   };
 
   const handleSave = async () => {
+    // Prevent scheduling without a time slot
+    if (!formData.time) {
+      toast({
+        title: "Time Slot Required",
+        description: "Please select a time slot before scheduling the appointment.",
+        variant: "destructive"
+      });
+      return;
+    }
     // Check for appointment conflicts
-    if (formData.date && formData.time && formData.duration) {
+    if (formData.date && formData.time) {
       const hasConflict = checkAppointmentConflict(
-        formData.date, 
-        formData.time, 
-        parseInt(formData.duration), 
+        formData.date,
+        formData.time,
+        slotDuration,
         existingAppointments
       );
-      
       if (hasConflict) {
         toast({
           title: "Appointment Conflict",
@@ -162,11 +244,14 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
           formData.date.getDate()
         )).toISOString()
       : formData.date;
-    const appointmentData = {
+    const appointmentData: Appointment = {
       ...formData,
+      duration: String(slotDuration),
       date: formattedDate,
       id: appointment?.id || Date.now(),
-      status: appointment?.status || "Pending"
+      status: appointment?.status || "Pending",
+      // Add selectedPatientId to appointment data
+      patientId: selectedPatientId || undefined
     };
     // Await onSave in case it's async
     const result = await onSave(appointmentData);
@@ -174,8 +259,37 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
     if (result !== false) {
       setOpen(false);
       if (onClose) onClose();
+      // Reload appointments for the selected date to update available slots
+      await loadExistingAppointments();
     }
   };
+
+  // Reset form data to initial state when dialog is opened for 'create' mode
+  useEffect(() => {
+    if (open && mode === 'create') {
+      setFormData(initialFormData);
+      setPatientFound(null);
+      setShowCreatePatient(false);
+      setMatchingPatients([]);
+      setSelectedPatientId(null);
+    }
+  }, [open, mode, initialFormData]);
+
+  // Reset form when selectedDate or selectedTime changes (e.g., user changes date)
+  useEffect(() => {
+    setFormData({
+      patientName: "",
+      patientPhone: "",
+      date: selectedDate ? (typeof selectedDate === 'string' ? new Date(selectedDate) : selectedDate) : new Date(),
+      time: selectedTime || "",
+      type: "Consultation",
+      notes: ""
+    });
+    setPatientFound(null);
+    setShowCreatePatient(false);
+    setMatchingPatients([]);
+    setSelectedPatientId(null);
+  }, [selectedDate, selectedTime]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -229,7 +343,7 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
                 <SelectContent>
                   {matchingPatients.map((p) => (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {p.name} ({p.visibleId}) - {p.age}y / {p.gender}
+                      {p.name} {p.visibleId ? `(${p.visibleId})` : ""} {p.age ? `- ${p.age}y` : ""} {p.gender ? `/ ${p.gender}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -286,26 +400,30 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
 
             <div className="space-y-2">
               <Label>Time</Label>
-              <Select 
-                value={formData.time} 
-                onValueChange={(time) => setFormData({...formData, time})}
-                disabled={settingsLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={settingsLoading ? "Loading..." : "Select time"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableSlots().map((time) => (
-                    <SelectItem 
-                      key={time} 
-                      value={time}
-                      className={!isTimeSlotAvailable(time) ? "text-gray-400" : ""}
-                    >
-                      {time} {!isTimeSlotAvailable(time) && "(Unavailable)"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {selectedTime ? (
+                <div className="px-3 py-2 border rounded bg-gray-50 text-gray-800 font-semibold">{selectedTime}</div>
+              ) : (
+                <Select 
+                  value={formData.time} 
+                  onValueChange={(time) => setFormData({...formData, time})}
+                  disabled={settingsLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={settingsLoading ? "Loading..." : "Select time"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableSlots().map((time) => (
+                      <SelectItem 
+                        key={time} 
+                        value={time}
+                        className={!isTimeSlotAvailable(time) ? "text-gray-400" : ""}
+                      >
+                        {time} {!isTimeSlotAvailable(time) && "(Unavailable)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
 
@@ -320,26 +438,6 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
                   {appointmentTypes.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Duration</Label>
-              <Select 
-                value={formData.duration} 
-                onValueChange={(duration) => setFormData({...formData, duration})}
-                disabled={settingsLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={settingsLoading ? "Loading..." : "Select duration"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {durations.map((duration) => (
-                    <SelectItem key={duration.value} value={duration.value}>
-                      {duration.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -366,8 +464,18 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose }: AppointmentDi
           <Button
             type="submit"
             className="bg-medical-500 hover:bg-medical-600"
-            disabled={!patientFound}
-            onClick={handleSave}
+            disabled={!patientFound || !formData.time}
+            onClick={async () => {
+              if (!formData.time) {
+                toast({
+                  title: "Time Slot Required",
+                  description: "Please select a time slot before scheduling.",
+                  variant: "destructive"
+                });
+                return;
+              }
+              await handleSave();
+            }}
           >
             {mode === 'create' ? 'Schedule' : 'Update'}
           </Button>

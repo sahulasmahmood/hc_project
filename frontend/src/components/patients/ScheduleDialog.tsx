@@ -54,6 +54,7 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
   const timeSlots = getActiveTimeSlots().map(slot => slot.time);
   const durations = getActiveDurations();
   const appointmentTypes = settings.appointmentTypes;
+  const slotDuration = settings.defaultDuration; // Use defaultDuration from settings
 
   // Load existing appointments for the selected date
   useEffect(() => {
@@ -75,15 +76,43 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
   // Get available time slots for the selected date
   const getAvailableSlots = () => {
     if (!formData.date) return timeSlots;
-    
     const dateObj = new Date(formData.date);
-    const availableSlots = getAvailableTimeSlots(dateObj, existingAppointments);
-    return availableSlots.map(slot => slot.time);
+    let availableSlots = getAvailableTimeSlots(dateObj, existingAppointments).map(slot => slot.time);
+
+    // If the selected date is today, allow slot if its END time is in the future
+    const today = new Date();
+    const selectedDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    const isToday = today.getFullYear() === selectedDate.getFullYear() &&
+                   today.getMonth() === selectedDate.getMonth() &&
+                   today.getDate() === selectedDate.getDate();
+    const slotDurationMinutes = parseInt(slotDuration) || 30;
+    if (isToday) {
+      const now = today;
+      availableSlots = availableSlots.filter(time => {
+        // Parse time string (e.g., '10:30 AM') to a Date object on today
+        const [timePart, period] = time.split(' ');
+        let [hours, minutes] = timePart.split(':').map(Number);
+        if (period === 'PM' && hours !== 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+        const slotStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
+        const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60000);
+        return slotEnd > now;
+      });
+    }
+    return availableSlots;
   };
 
   // Check if date is within booking window
   const isDateValid = (date: Date) => {
-    return isWithinAdvanceBookingWindow(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today);
+    maxDate.setDate(today.getDate() + settings.advanceBookingDays);
+    maxDate.setHours(0, 0, 0, 0);
+    // Allow today and future dates up to maxDate
+    return d >= today && d <= maxDate;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,12 +150,13 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
       )).toISOString();
       
       const appointmentData = {
+        patientId: patient.id,
         patientName: patient.name,
         patientPhone: patient.phone,
         date: formattedDate,
         time: formData.time,
         type: formData.type,
-        duration: "30", // default duration
+        duration: String(slotDuration), // Set duration automatically
         notes: formData.notes,
         status: "Pending"
       };
@@ -183,10 +213,18 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={formData.date ? new Date(formData.date) : undefined}
+                    selected={formData.date ? new Date(
+                      Number(formData.date.split('-')[0]),
+                      Number(formData.date.split('-')[1]) - 1,
+                      Number(formData.date.split('-')[2])
+                    ) : undefined}
                     onSelect={(date) => {
                       if (date && isDateValid(date)) {
-                        setFormData({...formData, date: date.toISOString().split('T')[0], time: ""});
+                        // Store as local date string
+                        const year = date.getFullYear();
+                        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                        const day = date.getDate().toString().padStart(2, '0');
+                        setFormData({...formData, date: `${year}-${month}-${day}`, time: ""});
                       } else if (date) {
                         toast({
                           title: "Invalid Date",
@@ -201,11 +239,11 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
                 </PopoverContent>
               </Popover>
             </div>
-
+            
             <div className="space-y-2">
               <Label>Time</Label>
               <Select 
-                value={formData.time} 
+                value={formData.time}
                 onValueChange={(time) => setFormData({...formData, time})}
                 disabled={settingsLoading}
               >
@@ -236,18 +274,6 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
                       {type}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Duration</Label>
-              <Select value="30" disabled>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30">30 minutes</SelectItem>
                 </SelectContent>
               </Select>
             </div>

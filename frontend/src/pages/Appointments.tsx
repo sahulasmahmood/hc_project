@@ -39,6 +39,8 @@ const Appointments = () => {
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [appointmentsPerPage] = useState(10); // Show 10 appointments per page
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [slotToBook, setSlotToBook] = useState<{date: string, time: string} | null>(null);
 
   // Use appointment settings hook
   const { 
@@ -48,8 +50,32 @@ const Appointments = () => {
     getAvailableTimeSlots
   } = useAppointmentSettings();
 
-  // Get dynamic time slots
-  const availableTimeSlots = getActiveTimeSlots().map(slot => slot.time);
+  // Get all possible slots for the selected date
+  const allTimeSlots = getActiveTimeSlots().map(slot => slot.time);
+  // Get appointments for the selected date
+  const appointmentsForDate = appointments.filter(a => a.date.split('T')[0] === selectedDate);
+  // Get booked times
+  const bookedTimes = appointmentsForDate.map(a => a.time);
+  // Get available slots for the selected date
+  const availableSlots = getAvailableTimeSlots(new Date(selectedDate), appointmentsForDate).map(slot => slot.time);
+
+  // Helper to get slot status
+  const getSlotStatus = (time: string) => {
+    if (!allTimeSlots.includes(time)) return 'unavailable';
+    if (bookedTimes.includes(time)) return 'booked';
+    if (availableSlots.includes(time)) return 'available';
+    return 'unavailable';
+  };
+
+  // Helper to get slot color
+  const getSlotColor = (status: string) => {
+    switch (status) {
+      case 'available': return 'bg-green-100 text-green-800 border-green-400 hover:bg-green-200';
+      case 'booked': return 'bg-red-100 text-red-800 border-red-400 cursor-not-allowed opacity-60';
+      case 'unavailable': return 'bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed opacity-50';
+      default: return 'bg-gray-100 text-gray-400 border-gray-300';
+    }
+  };
 
   // Fetch appointments
   const fetchAppointments = async () => {
@@ -116,12 +142,22 @@ const Appointments = () => {
       // Refresh appointments after save
       fetchAppointments();
       return true; // <-- Success
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save appointment",
-        variant: "destructive"
-      });
+    } catch (error: any) {
+      // Check for backend error message
+      const backendMsg = error?.response?.data?.error;
+      if (backendMsg === 'Cannot schedule an appointment in the past.') {
+        toast({
+          title: "Invalid Appointment Time",
+          description: "You cannot schedule an appointment in the past. Please select a future time.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to save appointment",
+          variant: "destructive"
+        });
+      }
       return false; // <-- Failure
     }
   };
@@ -206,10 +242,8 @@ const Appointments = () => {
   };
 
   const handleTimeSlotClick = (time: string) => {
-    toast({
-      title: "Time Slot Selected",
-      description: `Selected time: ${time}. Click 'New Appointment' to schedule.`
-    });
+    setSlotToBook({ date: selectedDate, time });
+    setDialogOpen(true);
   };
 
   const handleApplyFilters = (newFilters: any) => {
@@ -223,7 +257,9 @@ const Appointments = () => {
 
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
-    setCurrentPage(1); // Reset to first page when changing date
+    setCurrentPage(1);
+    setDialogOpen(false);      // Close dialog if open
+    setSlotToBook(null);       // Clear any slot selection
   };
 
   const handlePageChange = (page: number) => {
@@ -294,7 +330,6 @@ const Appointments = () => {
         </div>
         <div className="flex gap-2">
           <FilterDialog onApplyFilters={handleApplyFilters} currentFilters={filters} />
-          <AppointmentDialog mode="create" onSave={handleSaveAppointment} />
         </div>
       </div>
 
@@ -306,6 +341,7 @@ const Appointments = () => {
             <input
               type="date"
               value={selectedDate}
+              min={new Date().toISOString().split('T')[0]} // <-- disables past dates
               onChange={(e) => handleDateChange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-medical-500"
             />
@@ -446,7 +482,6 @@ const Appointments = () => {
                 <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No appointments found</h3>
                 <p className="text-gray-500 mb-4">No appointments match your current filters for this date.</p>
-                <AppointmentDialog mode="create" onSave={handleSaveAppointment} />
               </CardContent>
             </Card>
           )}
@@ -457,6 +492,10 @@ const Appointments = () => {
       <Card>
         <CardHeader>
           <CardTitle>Available Time Slots</CardTitle>
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-md px-4 py-2 my-2">
+            <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
+            <span className="text-sm font-medium text-blue-800">Click an <span className="font-semibold underline">available time slot</span> below to schedule a new appointment.</span>
+          </div>
         </CardHeader>
         <CardContent>
           {settingsLoading ? (
@@ -465,22 +504,50 @@ const Appointments = () => {
               <p className="mt-2 text-gray-600">Loading time slots...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-              {availableTimeSlots.map((time) => (
-                <Button 
-                  key={time} 
-                  variant="outline" 
-                  size="sm" 
-                  className="text-center hover:bg-medical-50"
-                  onClick={() => handleTimeSlotClick(time)}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {allTimeSlots.map((time) => {
+              const status = getSlotStatus(time);
+              return (
+                <Button
+                  key={time}
+                  variant="outline"
+                  size="sm"
+                  className={`text-center border ${getSlotColor(status)}`}
+                  onClick={() => status === 'available' && handleTimeSlotClick(time)}
+                  disabled={status !== 'available'}
                 >
                   {time}
+                  {status === 'booked' && <span className="ml-2 text-xs">(Booked)</span>}
+                  {status === 'unavailable' && <span className="ml-2 text-xs">(Unavailable)</span>}
                 </Button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
           )}
         </CardContent>
       </Card>
+      {/* AppointmentDialog for slot booking */}
+      {slotToBook && (
+        <AppointmentDialog
+          mode="create"
+          onSave={handleSaveAppointment}
+          selectedDate={slotToBook.date}
+          selectedTime={slotToBook.time}
+          onClose={() => {
+            setDialogOpen(false);
+            setSlotToBook(null);
+          }}
+        />
+      )}
+      {dialogOpen && !slotToBook && (
+        <AppointmentDialog
+          mode="create"
+          onSave={handleSaveAppointment}
+          selectedDate={selectedDate}
+          selectedTime={undefined}
+          onClose={() => setDialogOpen(false)}
+        />
+      )}
     </div>
   );
 };
