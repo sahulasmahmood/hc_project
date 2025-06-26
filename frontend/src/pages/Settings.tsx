@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,20 +31,28 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AppointmentSettings from "@/components/appointments/AppointmentSettings";
+import { useHospitalSettings } from "@/hooks/settings_hook/use-hospital-settings"
+
+const defaultHospitalSettings = {
+  name: "",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  license: "",
+  director: "",
+  capacity: 0,
+  founded: "",
+};
 
 const Settings = () => {
   const { toast } = useToast();
-  const [hospitalSettings, setHospitalSettings] = useState({
-    name: "Apollo Healthcare Center",
-    address: "123 Medical Street, Mumbai, Maharashtra 400001",
-    phone: "+91 22 1234 5678",
-    email: "info@apollohealthcare.com",
-    website: "www.apollohealthcare.com",
-    license: "MH/HC/2023/001234",
-    director: "Dr. Rajesh Kumar",
-    capacity: 500,
-    founded: "1985"
-  });
+  const { settings: hospitalSettingsRaw, setSettings: setHospitalSettings, loadSettings, saveSettings, loading } = useHospitalSettings();
+  const hospitalSettings = hospitalSettingsRaw || defaultHospitalSettings;
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const [notificationSettings, setNotificationSettings] = useState({
     emailNotifications: true,
@@ -82,10 +91,28 @@ const Settings = () => {
     }, 500);
   };
 
-  const handleFormSubmit = (e: React.FormEvent, section: string) => {
+  const handleFormSubmit = async (e: React.FormEvent, section: string) => {
     e.preventDefault();
-    handleSaveSettings(section);
+    if (section === "Hospital") {
+      await saveSettings(hospitalSettings!);
+      toast({
+        title: "Settings Saved",
+        description: "Hospital settings have been updated successfully.",
+      });
+    } else {
+      handleSaveSettings(section);
+    }
   };
+
+  // Prevent rendering until hospitalSettings is loaded
+  if (loading || !hospitalSettings) {
+    return (
+      <div className="flex justify-center items-center h-96">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-medical-500 mx-auto"></div>
+        <span className="ml-4 text-gray-600">Loading settings...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

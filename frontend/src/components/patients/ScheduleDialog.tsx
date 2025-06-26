@@ -17,7 +17,7 @@ import { CalendarIcon, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useAppointmentSettings } from "@/hooks/use-appointment-settings";
+import { useAppointmentSettings } from "@/hooks/settings_hook/use-appointment-settings";
 import api from "@/lib/api";
 
 interface ScheduleDialogProps {
@@ -141,13 +141,12 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
         }
       }
 
-      // Format date as UTC midnight ISO string
+      // Format date as YYYY-MM-DD string (timezone-safe)
       const dateObj = new Date(formData.date);
-      const formattedDate = new Date(Date.UTC(
-        dateObj.getFullYear(),
-        dateObj.getMonth(),
-        dateObj.getDate()
-      )).toISOString();
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
       
       const appointmentData = {
         patientId: patient.id,

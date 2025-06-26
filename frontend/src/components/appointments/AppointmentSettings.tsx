@@ -95,7 +95,7 @@ const AppointmentSettings = () => {
   // Auto-generate time slots based on working hours and duration
   const generateTimeSlots = (startTime: string, endTime: string, durationMinutes: number, breakStart: string, breakEnd: string) => {
     const slots: TimeSlot[] = [];
-    let currentTime = new Date(`2000-01-01 ${startTime}`);
+    const currentTime = new Date(`2000-01-01 ${startTime}`);
     const endDateTime = new Date(`2000-01-01 ${endTime}`);
     const breakStartTime = new Date(`2000-01-01 ${breakStart}`);
     const breakEndTime = new Date(`2000-01-01 ${breakEnd}`);
@@ -248,19 +248,19 @@ const AppointmentSettings = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center">
+        <CardTitle className="flex items-center mb-2">
           <Calendar className="h-5 w-5 mr-2" />
           Appointment Configuration
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-10">
         {/* Working Hours */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
+        <div className="space-y-6 pb-2">
+          <div className="flex items-center gap-3 mb-2">
             <Clock className="h-4 w-4 text-gray-500" />
-            <h3 className="text-lg font-medium">Working Hours</h3>
+            <h3 className="text-lg font-semibold">Working Hours</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <Label>Start Time</Label>
               <Input
@@ -270,6 +270,7 @@ const AppointmentSettings = () => {
                   ...settings,
                   workingHours: { ...settings.workingHours, start: e.target.value }
                 })}
+                className="mt-1"
               />
             </div>
             <div>
@@ -281,6 +282,7 @@ const AppointmentSettings = () => {
                   ...settings,
                   workingHours: { ...settings.workingHours, end: e.target.value }
                 })}
+                className="mt-1"
               />
             </div>
             <div>
@@ -292,6 +294,7 @@ const AppointmentSettings = () => {
                   ...settings,
                   breakTime: { ...settings.breakTime, start: e.target.value }
                 })}
+                className="mt-1"
               />
             </div>
             <div>
@@ -303,18 +306,18 @@ const AppointmentSettings = () => {
                   ...settings,
                   breakTime: { ...settings.breakTime, end: e.target.value }
                 })}
+                className="mt-1"
               />
             </div>
           </div>
         </div>
-
+        <hr className="my-6 border-gray-200" />
         {/* Time Slot Generation */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
+        <div className="space-y-6 pb-2">
+          <div className="flex items-center gap-3 mb-2">
             <Calendar className="h-4 w-4 text-gray-500" />
-            <h3 className="text-lg font-medium">Time Slot Generation</h3>
+            <h3 className="text-lg font-semibold">Time Slot Generation</h3>
           </div>
-          
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label>Auto-Generate Time Slots</Label>
@@ -328,10 +331,9 @@ const AppointmentSettings = () => {
               })}
             />
           </div>
-
           {settings.autoGenerateSlots && (
             <>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                 <div className="flex items-start gap-2">
                   <div className="text-blue-600 mt-0.5">💡</div>
                   <div className="text-sm text-blue-800">
@@ -345,14 +347,12 @@ const AppointmentSettings = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Live Preview */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                 <div className="flex items-start gap-2">
                   <div className="text-green-600 mt-0.5">👁️</div>
                   <div className="text-sm text-green-800">
                     <p className="font-medium mb-2">Live Preview - Generated Slots:</p>
-                    <div className="grid grid-cols-3 md:grid-cols-4 gap-1 text-xs">
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2 text-xs">
                       {generateTimeSlots(
                         settings.workingHours.start,
                         settings.workingHours.end,
@@ -385,8 +385,7 @@ const AppointmentSettings = () => {
                   </div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <Label>Default Duration for Slot Generation</Label>
                   <Select 
@@ -417,10 +416,9 @@ const AppointmentSettings = () => {
               </div>
             </>
           )}
-
-          <div className="space-y-2">
+          <div className="space-y-2 mt-4">
             <Label>Available Time Slots ({settings.timeSlots.filter(s => s.isActive).length} active)</Label>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-60 overflow-y-auto border rounded-md p-4 bg-gray-50">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-60 overflow-y-auto border rounded-md p-4 bg-gray-50">
               {settings.timeSlots.length > 0 ? (
                 settings.timeSlots.map((slot) => (
                   <div key={slot.id} className="flex items-center gap-1">
@@ -448,19 +446,19 @@ const AppointmentSettings = () => {
             )}
           </div>
         </div>
-
+        <hr className="my-6 border-gray-200" />
         {/* Durations */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">Appointment Durations</h3>
-          <div className="flex gap-2">
+        <div className="space-y-6 pb-2">
+          <h3 className="text-lg font-semibold mb-2">Appointment Durations</h3>
+          <div className="flex gap-3">
             <Button onClick={addDuration} size="sm" variant="outline">
               <Plus className="h-4 w-4 mr-2" />
               Add Duration
             </Button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {settings.durations.map((duration) => (
-              <div key={duration.value} className="flex items-center gap-1">
+              <div key={duration.value} className="flex items-center gap-2">
                 <Badge 
                   variant={duration.isActive ? "default" : "secondary"}
                   className="flex-1 cursor-pointer"
@@ -480,11 +478,11 @@ const AppointmentSettings = () => {
             ))}
           </div>
         </div>
-
+        <hr className="my-6 border-gray-200" />
         {/* Appointment Types */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">Appointment Types</h3>
-          <div className="flex gap-2">
+        <div className="space-y-6 pb-2">
+          <h3 className="text-lg font-semibold mb-2">Appointment Types</h3>
+          <div className="flex gap-3">
             <Input
               placeholder="Enter appointment type"
               value={newAppointmentType}
@@ -495,9 +493,9 @@ const AppointmentSettings = () => {
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {settings.appointmentTypes.map((type) => (
-              <Badge key={type} variant="outline" className="flex items-center gap-1">
+              <Badge key={type} variant="outline" className="flex items-center gap-2">
                 {type}
                 <Button
                   variant="ghost"
@@ -511,11 +509,11 @@ const AppointmentSettings = () => {
             ))}
           </div>
         </div>
-
+        <hr className="my-6 border-gray-200" />
         {/* Scheduling Rules */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">Scheduling Rules</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-6 pb-2">
+          <h3 className="text-lg font-semibold mb-2">Scheduling Rules</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <Label>Maximum Appointments Per Day</Label>
               <Input
@@ -525,6 +523,7 @@ const AppointmentSettings = () => {
                   ...settings,
                   maxAppointmentsPerDay: parseInt(e.target.value)
                 })}
+                className="mt-1"
               />
             </div>
             <div>
@@ -536,6 +535,7 @@ const AppointmentSettings = () => {
                   ...settings,
                   bufferTime: parseInt(e.target.value)
                 })}
+                className="mt-1"
               />
             </div>
             <div>
@@ -547,10 +547,11 @@ const AppointmentSettings = () => {
                   ...settings,
                   advanceBookingDays: parseInt(e.target.value)
                 })}
+                className="mt-1"
               />
             </div>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mt-4">
             <div className="space-y-0.5">
               <Label>Allow Overlapping Appointments</Label>
               <p className="text-sm text-gray-500">Enable multiple appointments at the same time</p>
@@ -564,9 +565,8 @@ const AppointmentSettings = () => {
             />
           </div>
         </div>
-
         {/* Save Button */}
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end pt-6">
           <Button onClick={saveSettings} disabled={isLoading} className="w-full md:w-auto">
             {isLoading ? "Saving..." : "Save Settings"}
           </Button>

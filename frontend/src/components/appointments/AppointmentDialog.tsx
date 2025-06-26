@@ -12,7 +12,7 @@ import { CalendarIcon, Plus, User, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { useAppointmentSettings } from "@/hooks/use-appointment-settings";
+import { useAppointmentSettings } from "@/hooks/settings_hook/use-appointment-settings";
 import PatientFormDialog from "@/components/patients/PatientFormDialog";
 
 // Types from hooks/use-appointment-settings.ts
@@ -121,7 +121,11 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose, selectedDate, s
 
   const loadExistingAppointments = async () => {
     try {
-      const dateString = formData.date.toISOString().split('T')[0];
+      // Fix timezone issue by creating date string manually
+      const year = formData.date.getFullYear();
+      const month = String(formData.date.getMonth() + 1).padStart(2, '0');
+      const day = String(formData.date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
       const response = await api.get(`/appointments?date=${dateString}`);
       setExistingAppointments(response.data || []);
     } catch (error) {
@@ -236,13 +240,14 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose, selectedDate, s
       }
     }
 
-    // Format date as UTC midnight to avoid timezone issues
+    // Format date as timezone-safe string
     const formattedDate = formData.date instanceof Date
-      ? new Date(Date.UTC(
-          formData.date.getFullYear(),
-          formData.date.getMonth(),
-          formData.date.getDate()
-        )).toISOString()
+      ? (() => {
+          const year = formData.date.getFullYear();
+          const month = String(formData.date.getMonth() + 1).padStart(2, '0');
+          const day = String(formData.date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        })()
       : formData.date;
     const appointmentData: Appointment = {
       ...formData,

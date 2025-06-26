@@ -70,7 +70,9 @@ const createAppointment = async (req, res) => {
     }
 
     // Validate: Prevent scheduling in the past (allow if slot's END time is in the future)
-    const appointmentDate = new Date(date);
+    // Fix timezone issue by creating date in local timezone
+    const [year, month, day] = date.split('-').map(Number);
+    const appointmentDate = new Date(year, month - 1, day); // month is 0-indexed
     // Parse time string (e.g., '10:30 AM') to set hours and minutes
     let slotDurationMinutes = 30; // default fallback
     if (duration) {
@@ -95,7 +97,7 @@ const createAppointment = async (req, res) => {
           patientName: patient.name,
           patientPhone,
           patientVisibleId: patient.visibleId,
-          date: new Date(date),
+          date: appointmentDate,
           time,
           type,
           duration,
@@ -141,7 +143,11 @@ const updateAppointment = async (req, res) => {
       data: {
         patientName,
         patientPhone,
-        date: date ? new Date(date) : undefined,
+        date: date ? (() => {
+          // Fix timezone issue by creating date in local timezone
+          const [year, month, day] = date.split('-').map(Number);
+          return new Date(year, month - 1, day); // month is 0-indexed
+        })() : undefined,
         time,
         type,
         duration,
@@ -174,10 +180,136 @@ const deleteAppointment = async (req, res) => {
   }
 };
 
+// Reschedule appointment
+const rescheduleAppointment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newDate, newTime } = req.body;
+
+    console.log('Rescheduling appointment:', id, 'to', newDate, newTime);
+
+    // Get the current appointment
+    const currentAppointment = await prisma.appointment.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!currentAppointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Check if appointment can be rescheduled
+    const blockedStatuses = ["In Progress", "Completed", "Cancelled"];
+    if (blockedStatuses.includes(currentAppointment.status)) {
+      return res.status(400).json({ 
+        error: `Cannot reschedule appointment with status "${currentAppointment.status}". Only pending or confirmed appointments can be rescheduled.` 
+      });
+    }
+
+    // Validate new date and time
+    if (!newDate || !newTime) {
+      return res.status(400).json({ error: 'New date and time are required' });
+    }
+
+    // Parse the new appointment date and time
+    // Fix timezone issue by creating date in local timezone
+    const [year, month, day] = newDate.split('-').map(Number);
+    const appointmentDate = new Date(year, month - 1, day); // month is 0-indexed
+    const [timePart, period] = newTime.split(' ');
+    let [hours, minutes] = timePart.split(':').map(Number);
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    appointmentDate.setHours(hours, minutes, 0, 0);
+
+    // Validate: Prevent scheduling in the past
+    const slotDurationMinutes = parseInt(currentAppointment.duration) || 30;
+    const slotEnd = new Date(appointmentDate.getTime() + slotDurationMinutes * 60000);
+    if (slotEnd < new Date()) {
+      return res.status(400).json({ error: 'Cannot reschedule to a time in the past.' });
+    }
+
+    // Check if the new time slot is available (excluding the current appointment)
+    const conflictingAppointment = await prisma.appointment.findFirst({
+      where: {
+        date: appointmentDate, // Use the already created timezone-safe date
+        time: newTime,
+        id: { not: parseInt(id) } // Exclude the current appointment
+      }
+    });
+
+    if (conflictingAppointment) {
+      return res.status(409).json({ 
+        error: `Time slot ${newTime} on ${newDate} is already booked by ${conflictingAppointment.patientName}. Please select a different time.` 
+      });
+    }
+
+    // Update the appointment with new date and time
+    const updatedAppointment = await prisma.appointment.update({
+      where: { id: parseInt(id) },
+      data: {
+        date: appointmentDate,
+        time: newTime
+      }
+    });
+
+    console.log('Appointment rescheduled successfully:', updatedAppointment);
+    res.json(updatedAppointment);
+  } catch (error) {
+    console.error('Error rescheduling appointment:', error);
+    res.status(500).json({ error: 'Failed to reschedule appointment' });
+  }
+};
+
+const swapAppointments = async (req, res) => {
+  const { id1, id2 } = req.body;
+  if (!id1 || !id2) {
+    return res.status(400).json({ error: "Both appointment IDs are required" });
+  }
+  try {
+    const [a1, a2] = await Promise.all([
+      prisma.appointment.findUnique({ where: { id: id1 } }),
+      prisma.appointment.findUnique({ where: { id: id2 } }),
+    ]);
+    if (!a1 || !a2) {
+      return res.status(404).json({ error: "One or both appointments not found" });
+    }
+    const blocked = ["In Progress", "Completed", "Cancelled"];
+    if (blocked.includes(a1.status) || blocked.includes(a2.status)) {
+      return res.status(400).json({ error: "Cannot swap appointments with current status" });
+    }
+
+    // Use a temporary time value that cannot conflict
+    const tempTime = "__TEMP__" + Date.now();
+
+    await prisma.$transaction([
+      // Step 1: Move A to a temporary slot
+      prisma.appointment.update({
+        where: { id: id1 },
+        data: { date: a1.date, time: tempTime }
+      }),
+      // Step 2: Move B to A's original slot
+      prisma.appointment.update({
+        where: { id: id2 },
+        data: { date: a1.date, time: a1.time }
+      }),
+      // Step 3: Move A to B's original slot
+      prisma.appointment.update({
+        where: { id: id1 },
+        data: { date: a2.date, time: a2.time }
+      }),
+    ]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error swapping appointments:", error);
+    res.status(500).json({ error: "Failed to swap appointments" });
+  }
+};
+
 module.exports = {
   getAllAppointments,
   getAppointment,
   createAppointment,
   updateAppointment,
-  deleteAppointment
+  deleteAppointment,
+  rescheduleAppointment,
+  swapAppointments
 };

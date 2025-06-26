@@ -177,13 +177,7 @@ export const useAppointmentSettings = () => {
 
   const getAvailableTimeSlots = (date: Date, existingAppointments: Appointment[] = []) => {
     const activeSlots = getActiveTimeSlots();
-    const dayOfWeek = date.getDay();
     
-    // Filter out weekends (0 = Sunday, 6 = Saturday)
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return [];
-    }
-
     // Filter appointments to only those for the selected date
     const dateString = date.toISOString().split('T')[0];
     const appointmentsForDate = existingAppointments.filter(app => {

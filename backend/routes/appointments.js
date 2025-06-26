@@ -5,7 +5,9 @@ const {
   getAppointment,
   createAppointment,
   updateAppointment,
-  deleteAppointment
+  deleteAppointment,
+  rescheduleAppointment,
+  swapAppointments
 } = require('../controllers/appointments/appointments');
 
 // Get all appointments
@@ -19,6 +21,12 @@ router.post('/appointments', createAppointment);
 
 // Update appointment
 router.put('/appointments/:id', updateAppointment);
+
+// Reschedule appointment
+router.patch('/appointments/:id/reschedule', rescheduleAppointment);
+
+// Swap appointments
+router.post('/appointments/swap', swapAppointments);
 
 // Delete appointment
 router.delete('/appointments/:id', deleteAppointment);

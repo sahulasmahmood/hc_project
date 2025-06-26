@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, User, CheckCircle, AlertTriangle, Phone, Filter, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, Clock, User, CheckCircle, AlertTriangle, Phone, Filter, Search, ChevronLeft, ChevronRight, ArrowRightLeft } from "lucide-react";
 import { 
   Pagination, 
   PaginationContent, 
@@ -13,8 +13,10 @@ import {
 } from "@/components/ui/pagination";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { useAppointmentSettings } from "@/hooks/use-appointment-settings";
+import { useAppointmentSettings } from "@/hooks/settings_hook/use-appointment-settings";
 import AppointmentDialog from "@/components/appointments/AppointmentDialog";
+import RescheduleDialog from "@/components/appointments/RescheduleDialog";
+import TimeSlotSwapDialog from "@/components/appointments/TimeSlotSwapDialog";
 import FilterDialog from "@/components/appointments/FilterDialog";
 import api from "@/lib/api";
 
@@ -33,7 +35,12 @@ interface Appointment {
 
 const Appointments = () => {
   const { toast } = useToast();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Fix timezone issue by creating date string manually
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const [selectedDate, setSelectedDate] = useState(`${year}-${month}-${day}`);
   const [filters, setFilters] = useState({ status: [], type: [], timeRange: "all" });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,6 +48,9 @@ const Appointments = () => {
   const [appointmentsPerPage] = useState(10); // Show 10 appointments per page
   const [dialogOpen, setDialogOpen] = useState(false);
   const [slotToBook, setSlotToBook] = useState<{date: string, time: string} | null>(null);
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [selectedAppointmentForReschedule, setSelectedAppointmentForReschedule] = useState<Appointment | null>(null);
+  const [swapDialogOpen, setSwapDialogOpen] = useState(false);
 
   // Use appointment settings hook
   const { 
@@ -202,9 +212,9 @@ const Appointments = () => {
 
   const handleReschedule = async (appointmentId: number, newDate: string, newTime: string) => {
     try {
-      const response = await api.put(`/appointments/${appointmentId}`, {
-        date: newDate,
-        time: newTime
+      const response = await api.patch(`/appointments/${appointmentId}/reschedule`, {
+        newDate,
+        newTime
       });
       setAppointments(prev => prev.map(a => a.id === appointmentId ? response.data : a));
       toast({
@@ -213,13 +223,19 @@ const Appointments = () => {
       });
       // Refresh appointments after rescheduling
       fetchAppointments();
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || "Failed to reschedule appointment";
       toast({
         title: "Error",
-        description: "Failed to reschedule appointment",
+        description: errorMessage,
         variant: "destructive"
       });
     }
+  };
+
+  const handleRescheduleClick = (appointment: Appointment) => {
+    setSelectedAppointmentForReschedule(appointment);
+    setRescheduleDialogOpen(true);
   };
 
   const handleDeleteAppointment = async (appointmentId: number) => {
@@ -273,8 +289,12 @@ const Appointments = () => {
     console.log('Selected date:', selectedDate);
     console.log('Appointment date:', appointment.date);
     
-    // Convert appointment date to YYYY-MM-DD format for comparison
-    const appointmentDate = new Date(appointment.date).toISOString().split('T')[0];
+    // Convert appointment date to YYYY-MM-DD format for comparison (timezone-safe)
+    const appointmentDateObj = new Date(appointment.date);
+    const appointmentYear = appointmentDateObj.getFullYear();
+    const appointmentMonth = String(appointmentDateObj.getMonth() + 1).padStart(2, '0');
+    const appointmentDay = String(appointmentDateObj.getDate()).padStart(2, '0');
+    const appointmentDate = `${appointmentYear}-${appointmentMonth}-${appointmentDay}`;
     console.log('Formatted appointment date:', appointmentDate);
     
     if (appointmentDate !== selectedDate) {
@@ -321,6 +341,10 @@ const Appointments = () => {
 
   console.log('Filtered appointments:', filteredAppointments);
 
+  const handleSwapComplete = () => {
+    fetchAppointments();
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -329,6 +353,15 @@ const Appointments = () => {
           <h1 className="text-3xl font-bold text-gray-900">Appointments</h1>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setSwapDialogOpen(true)}
+            disabled={filteredAppointments.length < 2}
+            className="flex items-center gap-2"
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+            Swap Slots
+          </Button>
           <FilterDialog onApplyFilters={handleApplyFilters} currentFilters={filters} />
         </div>
       </div>
@@ -341,7 +374,13 @@ const Appointments = () => {
             <input
               type="date"
               value={selectedDate}
-              min={new Date().toISOString().split('T')[0]} // <-- disables past dates
+              min={(() => {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+              })()} // <-- disables past dates
               onChange={(e) => handleDateChange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-medical-500"
             />
@@ -399,7 +438,7 @@ const Appointments = () => {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => handleReschedule(appointment.id, appointment.date, appointment.time)}
+                      onClick={() => handleRescheduleClick(appointment)}
                     >
                       Reschedule
                     </Button>
@@ -546,6 +585,26 @@ const Appointments = () => {
           selectedDate={selectedDate}
           selectedTime={undefined}
           onClose={() => setDialogOpen(false)}
+        />
+      )}
+      {rescheduleDialogOpen && selectedAppointmentForReschedule && (
+        <RescheduleDialog
+          appointment={selectedAppointmentForReschedule}
+          isOpen={rescheduleDialogOpen}
+          onReschedule={handleReschedule}
+          onClose={() => {
+            setRescheduleDialogOpen(false);
+            setSelectedAppointmentForReschedule(null);
+          }}
+        />
+      )}
+      {swapDialogOpen && (
+        <TimeSlotSwapDialog
+          isOpen={swapDialogOpen}
+          onClose={() => setSwapDialogOpen(false)}
+          selectedDate={selectedDate}
+          appointments={filteredAppointments}
+          onSwapComplete={handleSwapComplete}
         />
       )}
     </div>

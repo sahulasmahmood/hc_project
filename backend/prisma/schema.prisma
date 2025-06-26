@@ -15,64 +15,76 @@ datasource db {
 }
 
 model Appointment {
-  id            Int      @id @default(autoincrement())
-  patientId     Int?     // Making this optional for existing records
-  patient       Patient? @relation(fields: [patientId], references: [id])
-  patientName   String
-  patientPhone  String
+  id               Int      @id @default(autoincrement())
+  patientId        Int? // Making this optional for existing records
+  patient          Patient? @relation(fields: [patientId], references: [id])
+  patientName      String
+  patientPhone     String
   patientVisibleId String?
-  date          DateTime
-  time          String
-  type          String   @default("Consultation")
-  duration      String   @default("30")
-  status        String   @default("Pending")
-  notes         String?  @db.Text
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  date             DateTime
+  time             String
+  type             String   @default("Consultation")
+  duration         String   @default("30")
+  status           String   @default("Pending")
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  @@index([patientId])
   @@unique([date, time])
+  @@index([patientId])
 }
 
 model Patient {
-  id              Int       @id @default(autoincrement())
-  visibleId       String    @unique
-  name            String    @db.VarChar(100)
-  age             Int
-  gender          String    @db.VarChar(20)
-  phone           String    @db.VarChar(20)
-  email           String?   @db.VarChar(100)
-  condition       String?   @db.VarChar(200)
-  status          String    @default("Active") @db.VarChar(50)
-  allergies       String[]
-  lastVisit       DateTime?
-  abhaId          String?   @unique @db.VarChar(50)
-  abhaVerified    Boolean   @default(false)
-  emergencyContact String?  @db.VarChar(100)
-  emergencyPhone  String?   @db.VarChar(20)
-  address         String?   @db.Text
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  appointments    Appointment[]
+  id               Int           @id @default(autoincrement())
+  visibleId        String        @unique
+  name             String        @db.VarChar(100)
+  age              Int
+  gender           String        @db.VarChar(20)
+  phone            String        @db.VarChar(20)
+  email            String?       @db.VarChar(100)
+  condition        String?       @db.VarChar(200)
+  status           String        @default("Active") @db.VarChar(50)
+  allergies        String[]
+  lastVisit        DateTime?
+  abhaId           String?       @unique @db.VarChar(50)
+  abhaVerified     Boolean       @default(false)
+  emergencyContact String?       @db.VarChar(100)
+  emergencyPhone   String?       @db.VarChar(20)
+  address          String?       @db.Text
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  appointments     Appointment[]
 }
 
 model AppointmentSettings {
-  id                   Int      @id @default(autoincrement())
-  workingHoursStart    String   // e.g. "08:00"
-  workingHoursEnd      String   // e.g. "18:00"
-  breakStart           String   // e.g. "12:00"
-  breakEnd             String   // e.g. "13:00"
-  durations            Json     // Array of { value: string, label: string, isActive: boolean }
-  appointmentTypes     String[] // e.g. ["Consultation", "Follow-up", ...]
-  maxAppointmentsPerDay Int     @default(50)
-  allowOverlapping     Boolean  @default(false)
-  bufferTime           Int      @default(15) // in minutes
-  advanceBookingDays   Int      @default(30)
-  autoGenerateSlots    Boolean  @default(true)
-  defaultDuration      String   @default("30")
-  timeSlots            Json     // Array of { id: string, time: string, isActive: boolean }
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                    Int      @id @default(autoincrement())
+  workingHoursStart     String // e.g. "08:00"
+  workingHoursEnd       String // e.g. "18:00"
+  breakStart            String // e.g. "12:00"
+  breakEnd              String // e.g. "13:00"
+  durations             Json // Array of { value: string, label: string, isActive: boolean }
+  appointmentTypes      String[] // e.g. ["Consultation", "Follow-up", ...]
+  maxAppointmentsPerDay Int      @default(50)
+  allowOverlapping      Boolean  @default(false)
+  bufferTime            Int      @default(15) // in minutes
+  advanceBookingDays    Int      @default(30)
+  autoGenerateSlots     Boolean  @default(true)
+  defaultDuration       String   @default("30")
+  timeSlots             Json // Array of { id: string, time: string, isActive: boolean }
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
-
+model HospitalSettings {
+  id        Int      @id @default(autoincrement())
+  name      String
+  address   String
+  phone     String
+  email     String
+  website   String?
+  license   String?
+  director  String?
+  capacity  Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
