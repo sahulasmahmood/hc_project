@@ -85,8 +85,11 @@ const TimeSlotSwapDialog = ({
       onClose();
       setSelectedAppointment1(null);
       setSelectedAppointment2(null);
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.error || "Failed to swap time slots";
+    } catch (error: unknown) {
+      let errorMessage = "Failed to swap time slots";
+      if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'data' in error.response && error.response.data && typeof error.response.data === 'object' && 'error' in error.response.data) {
+        errorMessage = (error.response.data as { error?: string }).error || errorMessage;
+      }
       toast({
         title: "Swap Failed",
         description: errorMessage,
@@ -119,7 +122,7 @@ const TimeSlotSwapDialog = ({
               <p>3. Click "Swap Time Slots" to exchange their times</p>
               <p className="text-xs mt-2">
                 <AlertTriangle className="h-3 w-3 inline mr-1" />
-                Only pending and confirmed appointments can be swapped
+                Only confirmed appointments can be swapped
               </p>
             </div>
           </div>

@@ -56,27 +56,26 @@ const RescheduleDialog = ({ appointment, isOpen, onClose, onReschedule }: Resche
   // Load existing appointments for the selected date
   useEffect(() => {
     if (selectedDate) {
+      const loadExistingAppointments = async () => {
+        try {
+          setSettingsLoading(true);
+          // Fix timezone issue by creating date string manually
+          const year = selectedDate.getFullYear();
+          const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+          const day = String(selectedDate.getDate()).padStart(2, '0');
+          const dateString = `${year}-${month}-${day}`;
+          const response = await api.get(`/appointments?date=${dateString}`);
+          setExistingAppointments(response.data || []);
+        } catch (error) {
+          console.log("Failed to load existing appointments");
+          setExistingAppointments([]);
+        } finally {
+          setSettingsLoading(false);
+        }
+      };
       loadExistingAppointments();
     }
   }, [selectedDate]);
-
-  const loadExistingAppointments = async () => {
-    try {
-      setSettingsLoading(true);
-      // Fix timezone issue by creating date string manually
-      const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      const dateString = `${year}-${month}-${day}`;
-      const response = await api.get(`/appointments?date=${dateString}`);
-      setExistingAppointments(response.data || []);
-    } catch (error) {
-      console.log("Failed to load existing appointments");
-      setExistingAppointments([]);
-    } finally {
-      setSettingsLoading(false);
-    }
-  };
 
   // Get available time slots for the selected date
   const getAvailableSlots = (): string[] => {
@@ -101,7 +100,8 @@ const RescheduleDialog = ({ appointment, isOpen, onClose, onReschedule }: Resche
       availableSlots = availableSlots.filter(time => {
         // Parse time string (e.g., '10:30 AM') to a Date object on today
         const [timePart, period] = time.split(' ');
-        let [hours, minutes] = timePart.split(':').map(Number);
+        const [hoursRaw, minutes] = timePart.split(':').map(Number);
+        let hours = hoursRaw;
         if (period === 'PM' && hours !== 12) hours += 12;
         if (period === 'AM' && hours === 12) hours = 0;
         const slotStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);

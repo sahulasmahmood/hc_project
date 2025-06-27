@@ -25,7 +25,7 @@ model Appointment {
   time             String
   type             String   @default("Consultation")
   duration         String   @default("30")
-  status           String   @default("Pending")
+  status           String   @default("Confirmed")
   notes            String?  @db.Text
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

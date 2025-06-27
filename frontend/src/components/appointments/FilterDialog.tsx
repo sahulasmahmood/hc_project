@@ -1,47 +1,35 @@
-
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Filter, X } from "lucide-react";
 
-interface FilterDialogProps {
-  onApplyFilters: (filters: any) => void;
-  currentFilters: any;
+export interface FilterValues {
+  type: string[];
+  timeRange: string;
 }
 
-const FilterDialog = ({ onApplyFilters, currentFilters }: FilterDialogProps) => {
+export interface FilterDialogProps {
+  onApplyFilters: (filters: FilterValues) => void;
+  currentFilters: FilterValues;
+  typeOptions: string[];
+}
+
+const FilterDialog = ({ onApplyFilters, currentFilters, typeOptions }: FilterDialogProps) => {
   const [open, setOpen] = useState(false);
-  const [filters, setFilters] = useState({
-    status: currentFilters.status || [],
+  const [filters, setFilters] = useState<FilterValues>({
     type: currentFilters.type || [],
     timeRange: currentFilters.timeRange || "all"
   });
 
-  const statusOptions = ["Confirmed", "Pending", "Urgent", "Completed", "Cancelled"];
-  const typeOptions = ["Consultation", "Follow-up", "Emergency", "Routine Checkup", "Specialist Visit"];
   const timeRangeOptions = [
     { value: "all", label: "All Day" },
     { value: "morning", label: "Morning (8AM - 12PM)" },
     { value: "afternoon", label: "Afternoon (12PM - 5PM)" },
     { value: "evening", label: "Evening (5PM - 8PM)" }
   ];
-
-  const handleStatusChange = (status: string, checked: boolean) => {
-    if (checked) {
-      setFilters(prev => ({
-        ...prev,
-        status: [...prev.status, status]
-      }));
-    } else {
-      setFilters(prev => ({
-        ...prev,
-        status: prev.status.filter((s: string) => s !== status)
-      }));
-    }
-  };
 
   const handleTypeChange = (type: string, checked: boolean) => {
     if (checked) {
@@ -63,7 +51,7 @@ const FilterDialog = ({ onApplyFilters, currentFilters }: FilterDialogProps) => 
   };
 
   const handleClear = () => {
-    const clearedFilters = { status: [], type: [], timeRange: "all" };
+    const clearedFilters = { type: [], timeRange: "all" };
     setFilters(clearedFilters);
     onApplyFilters(clearedFilters);
   };
@@ -79,29 +67,12 @@ const FilterDialog = ({ onApplyFilters, currentFilters }: FilterDialogProps) => 
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Filter Appointments</DialogTitle>
+          <DialogDescription className="sr-only">Filter appointments by type and time range.</DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Status</Label>
-            <div className="space-y-2">
-              {statusOptions.map((status) => (
-                <div key={status} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`status-${status}`}
-                    checked={filters.status.includes(status)}
-                    onCheckedChange={(checked) => handleStatusChange(status, checked as boolean)}
-                  />
-                  <Label htmlFor={`status-${status}`} className="text-sm font-normal">
-                    {status}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
             <Label className="text-sm font-medium">Appointment Type</Label>
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
               {typeOptions.map((type) => (
                 <div key={type} className="flex items-center space-x-2">
                   <Checkbox

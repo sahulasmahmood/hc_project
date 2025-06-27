@@ -48,7 +48,7 @@ const createAppointment = async (req, res) => {
       type,
       duration,
       notes = '',
-      status = 'Pending'
+      status = 'Confirmed'
     } = req.body;
 
     let patient = null;
@@ -89,6 +89,23 @@ const createAppointment = async (req, res) => {
     const slotEnd = new Date(appointmentDate.getTime() + slotDurationMinutes * 60000);
     if (slotEnd < new Date()) {
       return res.status(400).json({ error: 'Cannot schedule an appointment in the past.' });
+    }
+
+    // Check maximum appointments per day limit
+    const appointmentSettings = await prisma.appointmentSettings.findFirst();
+    if (appointmentSettings) {
+      // Count existing appointments for the same date
+      const existingAppointmentsCount = await prisma.appointment.count({
+        where: {
+          date: appointmentDate
+        }
+      });
+
+      if (existingAppointmentsCount >= appointmentSettings.maxAppointmentsPerDay) {
+        return res.status(400).json({ 
+          error: `Maximum appointments per day (${appointmentSettings.maxAppointmentsPerDay}) has been reached for ${date}. Please select a different date.` 
+        });
+      }
     }
 
     try {
@@ -201,7 +218,7 @@ const rescheduleAppointment = async (req, res) => {
     const blockedStatuses = ["In Progress", "Completed", "Cancelled"];
     if (blockedStatuses.includes(currentAppointment.status)) {
       return res.status(400).json({ 
-        error: `Cannot reschedule appointment with status "${currentAppointment.status}". Only pending or confirmed appointments can be rescheduled.` 
+        error: `Cannot reschedule appointment with status "${currentAppointment.status}". Only confirmed appointments can be rescheduled.` 
       });
     }
 
@@ -240,6 +257,26 @@ const rescheduleAppointment = async (req, res) => {
       return res.status(409).json({ 
         error: `Time slot ${newTime} on ${newDate} is already booked by ${conflictingAppointment.patientName}. Please select a different time.` 
       });
+    }
+
+    // Check maximum appointments per day limit for rescheduling to a different date
+    if (currentAppointment.date.toISOString().split('T')[0] !== newDate) {
+      const appointmentSettings = await prisma.appointmentSettings.findFirst();
+      if (appointmentSettings) {
+        // Count existing appointments for the new date (excluding the current appointment)
+        const existingAppointmentsCount = await prisma.appointment.count({
+          where: {
+            date: appointmentDate,
+            id: { not: parseInt(id) } // Exclude the current appointment
+          }
+        });
+
+        if (existingAppointmentsCount >= appointmentSettings.maxAppointmentsPerDay) {
+          return res.status(400).json({ 
+            error: `Maximum appointments per day (${appointmentSettings.maxAppointmentsPerDay}) has been reached for ${newDate}. Cannot reschedule to this date.` 
+          });
+        }
+      }
     }
 
     // Update the appointment with new date and time

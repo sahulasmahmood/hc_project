@@ -20,8 +20,30 @@ import { useToast } from "@/hooks/use-toast";
 import { useAppointmentSettings } from "@/hooks/settings_hook/use-appointment-settings";
 import api from "@/lib/api";
 
+interface Patient {
+  id: string | number;
+  name: string;
+  phone: string;
+  visibleId?: string;
+  age?: number;
+  gender?: string;
+}
+
+interface Appointment {
+  id: string | number;
+  patientName: string;
+  patientPhone: string;
+  date: string;
+  time: string;
+  type: string;
+  duration: string;
+  notes?: string;
+  status: string;
+  patientVisibleId?: string;
+}
+
 interface ScheduleDialogProps {
-  patient: any;
+  patient: Patient;
   trigger: React.ReactNode;
 }
 
@@ -29,7 +51,7 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const [existingAppointments, setExistingAppointments] = useState<any[]>([]);
+  const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
   
   const [formData, setFormData] = useState({
     date: "",
@@ -56,22 +78,20 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
   const appointmentTypes = settings.appointmentTypes;
   const slotDuration = settings.defaultDuration; // Use defaultDuration from settings
 
-  // Load existing appointments for the selected date
   useEffect(() => {
     if (formData.date) {
+      const loadExistingAppointments = async () => {
+        try {
+          const response = await api.get(`/appointments?date=${formData.date}`);
+          setExistingAppointments(response.data || []);
+        } catch (error) {
+          console.log("Failed to load existing appointments");
+          setExistingAppointments([]);
+        }
+      };
       loadExistingAppointments();
     }
   }, [formData.date]);
-
-  const loadExistingAppointments = async () => {
-    try {
-      const response = await api.get(`/appointments?date=${formData.date}`);
-      setExistingAppointments(response.data || []);
-    } catch (error) {
-      console.log("Failed to load existing appointments");
-      setExistingAppointments([]);
-    }
-  };
 
   // Get available time slots for the selected date
   const getAvailableSlots = () => {
@@ -82,16 +102,17 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
     // If the selected date is today, allow slot if its END time is in the future
     const today = new Date();
     const selectedDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    const slotDurationMinutes = parseInt(slotDuration) || 30;
     const isToday = today.getFullYear() === selectedDate.getFullYear() &&
                    today.getMonth() === selectedDate.getMonth() &&
                    today.getDate() === selectedDate.getDate();
-    const slotDurationMinutes = parseInt(slotDuration) || 30;
     if (isToday) {
       const now = today;
       availableSlots = availableSlots.filter(time => {
         // Parse time string (e.g., '10:30 AM') to a Date object on today
         const [timePart, period] = time.split(' ');
-        let [hours, minutes] = timePart.split(':').map(Number);
+        const [hoursRaw, minutes] = timePart.split(':').map(Number);
+        let hours = hoursRaw;
         if (period === 'PM' && hours !== 12) hours += 12;
         if (period === 'AM' && hours === 12) hours = 0;
         const slotStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
@@ -148,6 +169,22 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
       const day = String(dateObj.getDate()).padStart(2, '0');
       const formattedDate = `${year}-${month}-${day}`;
       
+      // Check maximum appointments per day limit
+      const appointmentsForDate = existingAppointments.filter(app => {
+        const appDate = app.date.split('T')[0];
+        return appDate === formattedDate;
+      });
+
+      if (appointmentsForDate.length >= settings.maxAppointmentsPerDay) {
+        toast({
+          title: "Daily Limit Reached",
+          description: `Maximum appointments per day (${settings.maxAppointmentsPerDay}) has been reached for ${format(dateObj, 'PPP')}. Please select a different date.`,
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
       const appointmentData = {
         patientId: patient.id,
         patientName: patient.name,
@@ -157,7 +194,7 @@ const ScheduleDialog = ({ patient, trigger }: ScheduleDialogProps) => {
         type: formData.type,
         duration: String(slotDuration), // Set duration automatically
         notes: formData.notes,
-        status: "Pending"
+        status: "Confirmed"
       };
       
       await api.post("/appointments", appointmentData);

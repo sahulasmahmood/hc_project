@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, User, CheckCircle, AlertTriangle, Phone, Filter, Search, ChevronLeft, ChevronRight, ArrowRightLeft } from "lucide-react";
+import { Calendar, Clock, User, AlertTriangle, Phone, Filter, Search, ChevronLeft, ChevronRight, ArrowRightLeft, X } from "lucide-react";
 import { 
   Pagination, 
   PaginationContent, 
@@ -11,7 +11,7 @@ import {
   PaginationNext, 
   PaginationPrevious 
 } from "@/components/ui/pagination";
-import { format } from "date-fns";
+import { format, differenceInMinutes, parse } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAppointmentSettings } from "@/hooks/settings_hook/use-appointment-settings";
 import AppointmentDialog from "@/components/appointments/AppointmentDialog";
@@ -19,6 +19,17 @@ import RescheduleDialog from "@/components/appointments/RescheduleDialog";
 import TimeSlotSwapDialog from "@/components/appointments/TimeSlotSwapDialog";
 import FilterDialog from "@/components/appointments/FilterDialog";
 import api from "@/lib/api";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { FilterValues } from "@/components/appointments/FilterDialog";
 
 interface Appointment {
   id: number;
@@ -41,7 +52,7 @@ const Appointments = () => {
   const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
   const [selectedDate, setSelectedDate] = useState(`${year}-${month}-${day}`);
-  const [filters, setFilters] = useState({ status: [], type: [], timeRange: "all" });
+  const [filters, setFilters] = useState<FilterValues>({ type: [], timeRange: "all" });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -51,6 +62,8 @@ const Appointments = () => {
   const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
   const [selectedAppointmentForReschedule, setSelectedAppointmentForReschedule] = useState<Appointment | null>(null);
   const [swapDialogOpen, setSwapDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
 
   // Use appointment settings hook
   const { 
@@ -68,6 +81,12 @@ const Appointments = () => {
   const bookedTimes = appointmentsForDate.map(a => a.time);
   // Get available slots for the selected date
   const availableSlots = getAvailableTimeSlots(new Date(selectedDate), appointmentsForDate).map(slot => slot.time);
+  
+  // Daily appointments counter
+  const dailyAppointmentsCount = appointmentsForDate.length;
+  const maxAppointmentsPerDay = settings.maxAppointmentsPerDay;
+  const isDailyLimitReached = dailyAppointmentsCount >= maxAppointmentsPerDay;
+  const isDailyLimitNear = dailyAppointmentsCount >= maxAppointmentsPerDay * 0.8; // 80% of limit
 
   // Helper to get slot status
   const getSlotStatus = (time: string) => {
@@ -88,13 +107,13 @@ const Appointments = () => {
   };
 
   // Fetch appointments
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get('/appointments');
       setAppointments(response.data);
       setCurrentPage(1); // Reset to first page when fetching new data
-    } catch (error) {
+    } catch (error: unknown) {
       toast({
         title: "Error",
         description: "Failed to fetch appointments",
@@ -103,17 +122,16 @@ const Appointments = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   // Fetch appointments on component mount
   useEffect(() => {
     fetchAppointments();
-  }, []);
+  }, [fetchAppointments]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Confirmed": return "bg-green-100 text-green-800";
-      case "Pending": return "bg-yellow-100 text-yellow-800";
       case "Urgent": return "bg-red-100 text-red-800";
       case "Completed": return "bg-blue-100 text-blue-800";
       case "Cancelled": return "bg-gray-100 text-gray-800";
@@ -130,7 +148,7 @@ const Appointments = () => {
     }
   };
 
-  const handleSaveAppointment = async (appointmentData: any) => {
+  const handleSaveAppointment = async (appointmentData: Appointment) => {
     try {
       if (appointmentData.id && appointments.find(a => a.id === appointmentData.id)) {
         // Update existing appointment
@@ -152,9 +170,11 @@ const Appointments = () => {
       // Refresh appointments after save
       fetchAppointments();
       return true; // <-- Success
-    } catch (error: any) {
-      // Check for backend error message
-      const backendMsg = error?.response?.data?.error;
+    } catch (error: unknown) {
+      let backendMsg = undefined;
+      if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'data' in error.response && error.response.data && typeof error.response.data === 'object' && 'error' in error.response.data) {
+        backendMsg = (error.response.data as { error?: string }).error;
+      }
       if (backendMsg === 'Cannot schedule an appointment in the past.') {
         toast({
           title: "Invalid Appointment Time",
@@ -169,25 +189,6 @@ const Appointments = () => {
         });
       }
       return false; // <-- Failure
-    }
-  };
-
-  const handleConfirmAppointment = async (appointmentId: number) => {
-    try {
-      const response = await api.put(`/appointments/${appointmentId}`, { status: "Confirmed" });
-      setAppointments(prev => prev.map(a => a.id === appointmentId ? response.data : a));
-      toast({
-        title: "Appointment Confirmed",
-        description: "The appointment has been confirmed."
-      });
-      // Refresh appointments after confirmation
-      fetchAppointments();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to confirm appointment",
-        variant: "destructive"
-      });
     }
   };
 
@@ -223,8 +224,11 @@ const Appointments = () => {
       });
       // Refresh appointments after rescheduling
       fetchAppointments();
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.error || "Failed to reschedule appointment";
+    } catch (error: unknown) {
+      let errorMessage = "Failed to reschedule appointment";
+      if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'data' in error.response && error.response.data && typeof error.response.data === 'object' && 'error' in error.response.data) {
+        errorMessage = (error.response.data as { error?: string }).error || errorMessage;
+      }
       toast({
         title: "Error",
         description: errorMessage,
@@ -243,17 +247,30 @@ const Appointments = () => {
       await api.delete(`/appointments/${appointmentId}`);
       setAppointments(prev => prev.filter(a => a.id !== appointmentId));
       toast({
-        title: "Appointment Deleted",
-        description: "The appointment has been deleted successfully."
+        title: "Appointment Cancelled",
+        description: "The appointment has been cancelled and removed from the schedule."
       });
       // Refresh appointments after deletion
       fetchAppointments();
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to delete appointment",
+        description: "Failed to cancel appointment",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleCancelClick = (appointment: Appointment) => {
+    setAppointmentToCancel(appointment);
+    setCancelDialogOpen(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (appointmentToCancel) {
+      await handleDeleteAppointment(appointmentToCancel.id);
+      setCancelDialogOpen(false);
+      setAppointmentToCancel(null);
     }
   };
 
@@ -262,7 +279,7 @@ const Appointments = () => {
     setDialogOpen(true);
   };
 
-  const handleApplyFilters = (newFilters: any) => {
+  const handleApplyFilters = (newFilters: FilterValues) => {
     setFilters(newFilters);
     setCurrentPage(1); // Reset to first page when applying filters
     toast({
@@ -302,21 +319,17 @@ const Appointments = () => {
       return false;
     }
     
-    if (filters.status.length > 0 && !filters.status.includes(appointment.status)) {
-      console.log('Status filter mismatch');
+    // Type filter
+    if ((filters.type && filters.type.length > 0) && !filters.type.includes(appointment.type)) {
       return false;
     }
-    if (filters.type.length > 0 && !filters.type.includes(appointment.type)) {
-      console.log('Type filter mismatch');
-      return false;
-    }
-    
-    if (filters.timeRange !== "all") {
+    // Time range filter
+    const timeRange = filters.timeRange || 'all';
+    if (timeRange !== "all") {
       const hour = parseInt(appointment.time.split(':')[0]);
       const isPM = appointment.time.includes('PM');
       const hour24 = isPM && hour !== 12 ? hour + 12 : hour;
-      
-      switch (filters.timeRange) {
+      switch (timeRange) {
         case "morning":
           if (hour24 < 8 || hour24 >= 12) return false;
           break;
@@ -345,6 +358,65 @@ const Appointments = () => {
     fetchAppointments();
   };
 
+  // Compute unique status and type options from appointments
+  const statusOptions = Array.from(new Set(appointments.map(a => a.status))).sort();
+  const typeOptions = Array.from(new Set(appointments.map(a => a.type))).sort();
+
+  // Helper to get minutes until start (negative if overdue)
+  const getMinutesUntilStart = (appointment: Appointment) => {
+    const now = new Date();
+    const [hourStr, minuteStr] = appointment.time.split(":");
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const isPM = appointment.time.toLowerCase().includes("pm");
+    if (isPM && hour !== 12) hour += 12;
+    if (!isPM && hour === 12) hour = 0;
+    const appointmentDate = new Date(appointment.date);
+    appointmentDate.setHours(hour, minute, 0, 0);
+    return differenceInMinutes(appointmentDate, now);
+  };
+
+  // Helper to check if an appointment is starting soon (within 10 minutes)
+  const isStartingSoon = (appointment: Appointment) => {
+    const now = new Date();
+    // Parse appointment date and time into a Date object
+    const [hourStr, minuteStr] = appointment.time.split(":");
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const isPM = appointment.time.toLowerCase().includes("pm");
+    if (isPM && hour !== 12) hour += 12;
+    if (!isPM && hour === 12) hour = 0;
+    const appointmentDate = new Date(appointment.date);
+    appointmentDate.setHours(hour, minute, 0, 0);
+    const diff = differenceInMinutes(appointmentDate, now);
+    return diff >= 0 && diff <= 10;
+  };
+
+  // Helper to check if an appointment is overdue (time has passed, session not started)
+  const isSessionNotStarted = (appointment: Appointment) => {
+    if (appointment.status !== 'Confirmed' && appointment.status !== 'Urgent') return false;
+    const now = new Date();
+    const [hourStr, minuteStr] = appointment.time.split(":");
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const isPM = appointment.time.toLowerCase().includes("pm");
+    if (isPM && hour !== 12) hour += 12;
+    if (!isPM && hour === 12) hour = 0;
+    const appointmentDate = new Date(appointment.date);
+    appointmentDate.setHours(hour, minute, 0, 0);
+    return now > appointmentDate;
+  };
+
+  // State to force re-render for real-time updates
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowTick(Date.now());
+    }, 30000); // update every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -362,7 +434,7 @@ const Appointments = () => {
             <ArrowRightLeft className="h-4 w-4" />
             Swap Slots
           </Button>
-          <FilterDialog onApplyFilters={handleApplyFilters} currentFilters={filters} />
+          <FilterDialog onApplyFilters={handleApplyFilters} currentFilters={filters} typeOptions={settings.appointmentTypes || []} />
         </div>
       </div>
 
@@ -384,8 +456,25 @@ const Appointments = () => {
               onChange={(e) => handleDateChange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-medical-500"
             />
-            <div className="ml-auto text-sm text-gray-600">
-              {filteredAppointments.length} appointments scheduled
+            <div className="ml-auto flex items-center gap-4">
+              <div className={`text-sm font-medium ${
+                isDailyLimitReached ? 'text-red-600' : 
+                isDailyLimitNear ? 'text-yellow-600' : 'text-gray-600'
+              }`}>
+                {dailyAppointmentsCount} / {maxAppointmentsPerDay} appointments
+              </div>
+              {isDailyLimitReached && (
+                <div className="flex items-center gap-1 text-red-600 text-xs">
+                  <AlertTriangle className="h-3 w-3" />
+                  <span>Daily limit reached</span>
+                </div>
+              )}
+              {isDailyLimitNear && !isDailyLimitReached && (
+                <div className="flex items-center gap-1 text-yellow-600 text-xs">
+                  <AlertTriangle className="h-3 w-3" />
+                  <span>Limit approaching</span>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
@@ -402,80 +491,105 @@ const Appointments = () => {
       {/* Appointments List */}
       {!loading && (
         <div className="space-y-4">
-          {currentAppointments.map((appointment) => (
-            <Card key={appointment.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-1 h-16 rounded-full ${getTypeColor(appointment.type)}`}></div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium text-gray-900">{appointment.patientName}
-                          <span className="ml-2 text-xs text-gray-500 font-mono">{appointment.patientVisibleId}</span>
-                        </span>
-                        <Badge className={getStatusColor(appointment.status)}>
-                          {appointment.status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          <span>{appointment.time}</span>
+          {currentAppointments.map((appointment) => {
+            const minutesUntilStart = getMinutesUntilStart(appointment);
+            const showStartingSoon = (appointment.status === 'Confirmed' || appointment.status === 'Urgent') && minutesUntilStart > 0 && minutesUntilStart <= 10;
+            const showOverdue = (appointment.status === 'Confirmed' || appointment.status === 'Urgent') && minutesUntilStart < 0;
+            return (
+              <Card key={appointment.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-1 h-16 rounded-full ${getTypeColor(appointment.type)}`}></div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-gray-400" />
+                          <span className="font-medium text-gray-900">{appointment.patientName}
+                            <span className="ml-2 text-xs text-gray-500 font-mono">{appointment.patientVisibleId}</span>
+                          </span>
+                          <Badge className={getStatusColor(appointment.status)}>
+                            {appointment.status}
+                          </Badge>
+                          {showStartingSoon && (
+                            <Badge className="bg-yellow-400 text-yellow-900 animate-pulse ml-2">
+                              Starting in {minutesUntilStart} min
+                            </Badge>
+                          )}
+                          {showOverdue && (
+                            <Badge className={`ml-2 ${Math.abs(minutesUntilStart) > 5 ? 'bg-red-500 text-white animate-pulse' : 'bg-yellow-400 text-yellow-900'}`}>
+                              Overdue by {Math.abs(minutesUntilStart)} min
+                            </Badge>
+                          )}
                         </div>
-                        <span>•</span>
-                        <span>{appointment.duration} min</span>
-                        <span>•</span>
-                        <span className="font-medium">{appointment.type}</span>
+                        <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-4 w-4" />
+                            <span>{appointment.time}</span>
+                          </div>
+                          <span>•</span>
+                          <span>{appointment.duration} min</span>
+                          <span>•</span>
+                          <span className="font-medium">{appointment.type}</span>
+                        </div>
+                        {appointment.notes && (
+                          <p className="text-sm text-gray-500">{appointment.notes}</p>
+                        )}
                       </div>
-                      {appointment.notes && (
-                        <p className="text-sm text-gray-500">{appointment.notes}</p>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleRescheduleClick(appointment)}
+                      >
+                        Reschedule
+                      </Button>
+                      {appointment.status === 'Confirmed' && (
+                        <>
+                          <Button 
+                            size="sm" 
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => handleStartSession(appointment.id)}
+                          >
+                            Start Session
+                          </Button>
+                          <Button 
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => handleCancelClick(appointment)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                      {appointment.status === 'Urgent' && (
+                        <>
+                          <Button 
+                            size="sm" 
+                            className="bg-red-600 hover:bg-red-700"
+                            onClick={() => handleStartSession(appointment.id)}
+                          >
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            Handle Urgent
+                          </Button>
+                          <Button 
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => handleCancelClick(appointment)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
-                  
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handleRescheduleClick(appointment)}
-                    >
-                      Reschedule
-                    </Button>
-                    {appointment.status === 'Pending' && (
-                      <Button 
-                        size="sm" 
-                        className="bg-medical-500 hover:bg-medical-600"
-                        onClick={() => handleConfirmAppointment(appointment.id)}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Confirm
-                      </Button>
-                    )}
-                    {appointment.status === 'Confirmed' && (
-                      <Button 
-                        size="sm" 
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => handleStartSession(appointment.id)}
-                      >
-                        Start Session
-                      </Button>
-                    )}
-                    {appointment.status === 'Urgent' && (
-                      <Button 
-                        size="sm" 
-                        className="bg-red-600 hover:bg-red-700"
-                        onClick={() => handleStartSession(appointment.id)}
-                      >
-                        <AlertTriangle className="h-4 w-4 mr-1" />
-                        Handle Urgent
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -606,6 +720,30 @@ const Appointments = () => {
           appointments={filteredAppointments}
           onSwapComplete={handleSwapComplete}
         />
+      )}
+      {cancelDialogOpen && appointmentToCancel && (
+        <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel Appointment</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to cancel the appointment for {appointmentToCancel.patientName} on {format(new Date(appointmentToCancel.date), 'PPP')} at {appointmentToCancel.time}?
+                <br />
+                <br />
+                This action cannot be undone and the appointment will be permanently deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep Appointment</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleConfirmCancel}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Yes, Cancel Appointment
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );

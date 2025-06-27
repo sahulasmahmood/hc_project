@@ -150,7 +150,8 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose, selectedDate, s
       availableSlots = availableSlots.filter(time => {
         // Parse time string (e.g., '10:30 AM') to a Date object on today
         const [timePart, period] = time.split(' ');
-        let [hours, minutes] = timePart.split(':').map(Number);
+        const [hoursRaw, minutes] = timePart.split(':').map(Number);
+        let hours = hoursRaw;
         if (period === 'PM' && hours !== 12) hours += 12;
         if (period === 'AM' && hours === 12) hours = 0;
         const slotStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
@@ -240,7 +241,7 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose, selectedDate, s
       }
     }
 
-    // Format date as timezone-safe string
+    // Check maximum appointments per day limit
     const formattedDate = formData.date instanceof Date
       ? (() => {
           const year = formData.date.getFullYear();
@@ -249,12 +250,27 @@ const AppointmentDialog = ({ appointment, mode, onSave, onClose, selectedDate, s
           return `${year}-${month}-${day}`;
         })()
       : formData.date;
+    
+    const appointmentsForDate = existingAppointments.filter(app => {
+      const appDate = app.date.split('T')[0];
+      return appDate === formattedDate;
+    });
+
+    if (appointmentsForDate.length >= settings.maxAppointmentsPerDay) {
+      toast({
+        title: "Daily Limit Reached",
+        description: `Maximum appointments per day (${settings.maxAppointmentsPerDay}) has been reached for ${format(formData.date, 'PPP')}. Please select a different date.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     const appointmentData: Appointment = {
       ...formData,
       duration: String(slotDuration),
       date: formattedDate,
       id: appointment?.id || Date.now(),
-      status: appointment?.status || "Pending",
+      status: appointment?.status || "Confirmed",
       // Add selectedPatientId to appointment data
       patientId: selectedPatientId || undefined
     };
