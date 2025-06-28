@@ -1,5 +1,6 @@
 const { PrismaClient } = require('../../generated/prisma');
 const prisma = new PrismaClient();
+const { sendAppointmentConfirmationEmail, sendAppointmentCancellationEmail, sendAppointmentRescheduleEmail } = require("../../utils/appointmentMail");
 
 // Get all appointments
 const getAllAppointments = async (req, res) => {
@@ -123,6 +124,19 @@ const createAppointment = async (req, res) => {
           patientId: patient.id
         }
       });
+      await sendAppointmentConfirmationEmail({
+        to: patient.email,
+        name: patient.name,
+        appointmentDetails: {
+          date: appointment.date,
+          time: appointment.time,
+          type: appointment.type,
+          doctorName: appointment.doctorName || "", // if available
+          department: appointment.department || "", // if available
+          notes: appointment.notes || "",
+          patientName: patient.name,
+        }
+      });
       res.status(201).json(appointment);
     } catch (error) {
       console.error(error); // Log the error for debugging
@@ -185,7 +199,41 @@ const updateAppointment = async (req, res) => {
 const deleteAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    // console.log('Deleting appointment:', id);
+    // Find appointment details for cancellation email
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Fetch patient info
+    let patient = null;
+    if (appointment.patientId) {
+      patient = await prisma.patient.findUnique({ where: { id: appointment.patientId } });
+    }
+    if (!patient && appointment.patientPhone) {
+      patient = await prisma.patient.findFirst({ where: { phone: appointment.patientPhone } });
+    }
+
+    // Send cancellation email if patient email exists
+    if (patient && patient.email) {
+      await sendAppointmentCancellationEmail({
+        to: patient.email,
+        appointmentDetails: {
+          date: appointment.date,
+          time: appointment.time,
+          type: appointment.type,
+          doctorName: appointment.doctorName || "",
+          department: appointment.department || "",
+          notes: appointment.notes || "",
+          patientName: patient.name,
+        }
+      });
+    }
+
+    // Delete the appointment
     await prisma.appointment.delete({
       where: { id: parseInt(id) }
     });
@@ -218,7 +266,7 @@ const rescheduleAppointment = async (req, res) => {
     const blockedStatuses = ["In Progress", "Completed", "Cancelled"];
     if (blockedStatuses.includes(currentAppointment.status)) {
       return res.status(400).json({ 
-        error: `Cannot reschedule appointment with status "${currentAppointment.status}". Only confirmed appointments can be rescheduled.` 
+        error: `Cannot reschedule appointment with status \"${currentAppointment.status}\". Only confirmed appointments can be rescheduled.` 
       });
     }
 
@@ -265,30 +313,50 @@ const rescheduleAppointment = async (req, res) => {
       if (appointmentSettings) {
         // Count existing appointments for the new date (excluding the current appointment)
         const existingAppointmentsCount = await prisma.appointment.count({
-          where: {
-            date: appointmentDate,
-            id: { not: parseInt(id) } // Exclude the current appointment
-          }
+          where: { date: appointmentDate }
         });
-
         if (existingAppointmentsCount >= appointmentSettings.maxAppointmentsPerDay) {
           return res.status(400).json({ 
-            error: `Maximum appointments per day (${appointmentSettings.maxAppointmentsPerDay}) has been reached for ${newDate}. Cannot reschedule to this date.` 
+            error: `Maximum appointments per day (${appointmentSettings.maxAppointmentsPerDay}) has been reached for ${newDate}. Please select a different date.` 
           });
         }
       }
     }
 
-    // Update the appointment with new date and time
+    // Update the appointment with new date and time (use Date object for Prisma)
     const updatedAppointment = await prisma.appointment.update({
-      where: { id: parseInt(id) },
+      where: { id: Number(id) },
       data: {
         date: appointmentDate,
-        time: newTime
+        time: newTime,
       }
     });
 
-    console.log('Appointment rescheduled successfully:', updatedAppointment);
+    // Find patient
+    let patient = null;
+    if (updatedAppointment.patientId) {
+      patient = await prisma.patient.findUnique({ where: { id: updatedAppointment.patientId } });
+    }
+    if (!patient && updatedAppointment.patientPhone) {
+      patient = await prisma.patient.findFirst({ where: { phone: updatedAppointment.patientPhone } });
+    }
+
+    // Send reschedule email if patient email exists
+    if (patient && patient.email) {
+      await sendAppointmentRescheduleEmail({
+        to: patient.email,
+        appointmentDetails: {
+          date: updatedAppointment.date,
+          time: updatedAppointment.time,
+          type: updatedAppointment.type,
+          doctorName: updatedAppointment.doctorName || "",
+          department: updatedAppointment.department || "",
+          notes: updatedAppointment.notes || "",
+          patientName: patient.name,
+        }
+      });
+    }
+
     res.json(updatedAppointment);
   } catch (error) {
     console.error('Error rescheduling appointment:', error);

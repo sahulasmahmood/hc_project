@@ -30,8 +30,9 @@ import {
   Calendar
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import AppointmentSettings from "@/components/appointments/AppointmentSettings";
+import AppointmentSettings from "@/components/settings/AppointmentSettings";
 import { useHospitalSettings } from "@/hooks/settings_hook/use-hospital-settings"
+import EmailConfiguration from "@/components/settings/EmailConfiguration";
 
 const defaultHospitalSettings = {
   name: "",
@@ -122,13 +123,14 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue="hospital" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="hospital">Hospital</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="system">System</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="email">Email</TabsTrigger>
         </TabsList>
 
         <TabsContent value="hospital" className="space-y-6">
@@ -522,6 +524,10 @@ const Settings = () => {
               </form>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="email">
+          <EmailConfiguration />
         </TabsContent>
       </Tabs>
     </div>
