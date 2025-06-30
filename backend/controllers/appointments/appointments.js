@@ -1,6 +1,7 @@
 const { PrismaClient } = require('../../generated/prisma');
 const prisma = new PrismaClient();
 const { sendAppointmentConfirmationEmail, sendAppointmentCancellationEmail, sendAppointmentRescheduleEmail } = require("../../utils/appointmentMail");
+const { sendWhatsAppMessage, formatAppointmentMessage } = require("../../utils/whatsapp");
 
 // Get all appointments
 const getAllAppointments = async (req, res) => {
@@ -137,6 +138,29 @@ const createAppointment = async (req, res) => {
           patientName: patient.name,
         }
       });
+      if (patient.phone) {
+        // Convert 10-digit to E.164 (India) if needed
+        let phone = patient.phone;
+        if (/^\d{10}$/.test(phone)) {
+          phone = `+91${phone}`;
+        }
+        // Fetch hospital info for message
+        const hospitalSettings = await prisma.hospitalSettings.findFirst();
+        const message = formatAppointmentMessage({
+          patientName: patient.name,
+          date: appointment.date
+            ? new Date(appointment.date).toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+            : "",
+          time: appointment.time,
+          type: appointment.type,
+          doctorName: appointment.doctorName || "",
+          department: appointment.department || "",
+          hospitalName: hospitalSettings?.name || "Hospital",
+          hospitalPhone: hospitalSettings?.phone || "",
+        });
+        // This will log success or error in the utility itself
+        await sendWhatsAppMessage(phone, message);
+      }
       res.status(201).json(appointment);
     } catch (error) {
       console.error(error); // Log the error for debugging
