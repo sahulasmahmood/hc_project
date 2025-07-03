@@ -29,6 +29,8 @@ model Appointment {
   notes            String?  @db.Text
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  emergencyCase    EmergencyCase?
+  emergencyCaseId  Int?
 
   @@unique([date, time])
   @@index([patientId])
@@ -54,6 +56,8 @@ model Patient {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   appointments     Appointment[]
+  emergencyCases   EmergencyCase[]
+  createdFromEmergency Boolean   @default(false)
 }
 
 model AppointmentSettings {
@@ -89,7 +93,6 @@ model HospitalSettings {
   updatedAt DateTime @updatedAt
 }
 
-
 model EmailConfiguration {
   id           Int      @id @default(autoincrement())
   smtpPort     String
@@ -99,4 +102,45 @@ model EmailConfiguration {
   smtpHost     String
   updatedAt    DateTime @updatedAt
   createdAt    DateTime @default(now())
+}
+
+model InventoryItem {
+  id            Int       @id @default(autoincrement())
+  name          String
+  category      String
+  currentStock  Int
+  minStock      Int
+  maxStock      Int
+  unit          String
+  pricePerUnit  Float
+  supplier      String
+  expiryDate    DateTime? // Nullable for items like equipment
+  batchNumber   String?
+  lastRestocked DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model EmergencyCase {
+  id            Int        @id @default(autoincrement())
+  patientId     Int
+  patient       Patient    @relation(fields: [patientId], references: [id])
+  chiefComplaint String
+  arrivalTime   DateTime
+  triagePriority String
+  assignedTo    String
+  status        String
+  vitals        Json
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  appointmentId Int? @unique
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  transferStatus String    @default("Not Transferred")
+  transferTo      String?
+  transferReason  String?
+  transferNotes   String?
+  transferTime    DateTime?
+
+  @@index([patientId])
+  @@index([appointmentId])
 }

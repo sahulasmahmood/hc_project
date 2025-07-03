@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,69 +8,204 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertTriangle, Plus, Clock, User, Phone, MapPin, Activity, Siren, Heart, Zap } from "lucide-react";
+import api from "@/lib/api";
+
+const statusOptions = [
+  "Waiting",
+  "In Treatment",
+  "Admitted",
+  "Discharged"
+];
+
+// Define EmergencyCase type
+interface EmergencyCase {
+  id: number;
+  caseId: string;
+  patientId: number;
+  patientName: string;
+  age: number;
+  gender: string;
+  phone: string;
+  chiefComplaint: string;
+  triagePriority: string;
+  assignedTo: string;
+  status: string;
+  arrivalTime: string;
+  vitals: {
+    bp: string;
+    pulse: string;
+    temp: string;
+    spo2: string;
+  };
+}
+
+const transferHospitals = [
+  { value: "GH", label: "Government Hospital" },
+  { value: "Private", label: "Private Hospital" },
+  { value: "Other", label: "Other" },
+];
 
 const Emergency = () => {
   const [selectedPriority, setSelectedPriority] = useState("all");
+  const [emergencyCases, setEmergencyCases] = useState<EmergencyCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [registerForm, setRegisterForm] = useState({
+    patientName: '',
+    age: '',
+    gender: '',
+    phone: '',
+    chiefComplaint: '',
+    triagePriority: '',
+    bp: '',
+    pulse: '',
+    temp: '',
+    spo2: '',
+    assignedTo: '',
+    status: '',
+  });
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [statusCaseId, setStatusCaseId] = useState<number | null>(null);
+  const [newStatus, setNewStatus] = useState("");
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [fullChartOpen, setFullChartOpen] = useState(false);
+  const [fullChartCase, setFullChartCase] = useState<EmergencyCase | null>(null);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [transferCase, setTransferCase] = useState<EmergencyCase | null>(null);
+  const [transferHospital, setTransferHospital] = useState("");
+  const [transferReason, setTransferReason] = useState("");
+  const [transferNotes, setTransferNotes] = useState("");
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [vitalsDialogOpen, setVitalsDialogOpen] = useState(false);
+  const [vitalsCase, setVitalsCase] = useState<EmergencyCase | null>(null);
+  const [vitalsBP, setVitalsBP] = useState("");
+  const [vitalsPulse, setVitalsPulse] = useState("");
+  const [vitalsTemp, setVitalsTemp] = useState("");
+  const [vitalsSpO2, setVitalsSpO2] = useState("");
+  const [vitalsLoading, setVitalsLoading] = useState(false);
+  const [vitalsError, setVitalsError] = useState<string | null>(null);
 
-  const emergencyCases = [
-    {
-      id: 1,
-      caseId: "EM001",
-      patientName: "Rajesh Verma",
-      age: 45,
-      gender: "Male",
-      phone: "+91 98765 43210",
-      chiefComplaint: "Chest pain and difficulty breathing",
-      arrivalTime: "2024-01-25 14:30",
-      triagePriority: "Critical",
-      assignedTo: "Dr. Rajesh Kumar",
-      status: "In Treatment",
-      vitals: {
-        bp: "180/110",
-        pulse: "120",
-        temp: "99.2°F",
-        spo2: "92%"
+  const fetchCases = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get("/emergency");
+      setEmergencyCases(res.data);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to fetch emergency cases");
       }
-    },
-    {
-      id: 2,
-      caseId: "EM002",
-      patientName: "Priya Sharma",
-      age: 28,
-      gender: "Female",
-      phone: "+91 98765 43211",
-      chiefComplaint: "Severe abdominal pain",
-      arrivalTime: "2024-01-25 15:15",
-      triagePriority: "High",
-      assignedTo: "Dr. Anjali Patel",
-      status: "Waiting",
-      vitals: {
-        bp: "140/90",
-        pulse: "95",
-        temp: "101.5°F",
-        spo2: "98%"
-      }
-    },
-    {
-      id: 3,
-      caseId: "EM003",
-      patientName: "Amit Kumar",
-      age: 35,
-      gender: "Male",
-      phone: "+91 98765 43212",
-      chiefComplaint: "Minor cut on hand",
-      arrivalTime: "2024-01-25 15:45",
-      triagePriority: "Low",
-      assignedTo: "Dr. Meera Singh",
-      status: "Discharged",
-      vitals: {
-        bp: "120/80",
-        pulse: "78",
-        temp: "98.6°F",
-        spo2: "99%"
-      }
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchCases();
+  }, []);
+
+  // Helper to handle form input changes
+  const handleRegisterInput = (field: string, value: string) => {
+    setRegisterForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // POST new emergency case
+  const handleRegisterCase = async () => {
+    // Frontend validation for required fields
+    if (!registerForm.patientName || !registerForm.age || !registerForm.gender || !registerForm.phone) {
+      setRegisterError('Please fill all required fields: Name, Age, Gender, and Phone.');
+      return;
+    }
+    // Numeric age validation
+    const ageNum = Number(registerForm.age);
+    if (!Number.isInteger(ageNum) || ageNum <= 0) {
+      setRegisterError('Age must be a positive integer.');
+      return;
+    }
+    // Phone validation (at least 10 digits, numbers only)
+    const phoneDigits = registerForm.phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      setRegisterError('Phone number must be at least 10 digits.');
+      return;
+    }
+    // Triage priority validation
+    if (!registerForm.triagePriority) {
+      setRegisterError('Please select a triage priority.');
+      return;
+    }
+    setRegisterLoading(true);
+    setRegisterError(null);
+    try {
+      // Create patient
+      const patientRes = await api.post('/patients', {
+        name: registerForm.patientName,
+        age: ageNum,
+        gender: registerForm.gender,
+        phone: registerForm.phone,
+        status: 'Active',
+        allergies: [],
+        createdFromEmergency: true,
+      });
+      const patientId = patientRes.data.id;
+      // Determine appointment time based on triage priority
+      const now = new Date();
+      let appointmentTime = now;
+      // For demo: assign appointment time as now for all priorities
+      // (You can adjust logic for different priorities if needed)
+      // Format time as HH:mm:ss (include seconds to avoid unique constraint collisions)
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+      // Create appointment (double-booking allowed for emergencies)
+      const appointmentRes = await api.post('/appointments', {
+        patientId,
+        patientName: registerForm.patientName,
+        patientPhone: registerForm.phone,
+        date: now.toISOString().split('T')[0],
+        time: timeStr,
+        type: 'Emergency',
+        duration: '30',
+        status: 'Confirmed',
+        notes: `Auto-created for emergency (${registerForm.triagePriority})`,
+      });
+      const appointmentId = appointmentRes.data.id;
+      // Create emergency case
+      await api.post('/emergency', {
+        patientId,
+        chiefComplaint: registerForm.chiefComplaint,
+        arrivalTime: now.toISOString(),
+        triagePriority: registerForm.triagePriority,
+        assignedTo: registerForm.assignedTo || 'Unassigned',
+        status: registerForm.status || 'Waiting',
+        vitals: {
+          bp: registerForm.bp,
+          pulse: registerForm.pulse,
+          temp: registerForm.temp,
+          spo2: registerForm.spo2,
+        },
+        appointmentId,
+      });
+      setRegisterDialogOpen(false);
+      setRegisterForm({
+        patientName: '', age: '', gender: '', phone: '', chiefComplaint: '', triagePriority: '', bp: '', pulse: '', temp: '', spo2: '', assignedTo: '', status: '',
+      });
+      fetchCases();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setRegisterError(err.message);
+      } else {
+        setRegisterError('Failed to register emergency case and appointment');
+      }
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
 
   const triageProtocols = [
     {
@@ -124,14 +258,167 @@ const Emergency = () => {
     }
   };
 
+  const handleOpenStatusDialog = (caseId: number, currentStatus: string) => {
+    setStatusCaseId(caseId);
+    setNewStatus(currentStatus);
+    setStatusDialogOpen(true);
+    setStatusError(null);
+  };
+
+  const handleUpdateStatus = async () => {
+    if (!statusCaseId || !newStatus) return;
+    setStatusLoading(true);
+    setStatusError(null);
+    try {
+      await api.put(`/emergency/${statusCaseId}`, { status: newStatus });
+      setStatusDialogOpen(false);
+      fetchCases();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setStatusError(err.message);
+      } else {
+        setStatusError("Failed to update status");
+      }
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleOpenFullChart = (case_: EmergencyCase) => {
+    setFullChartCase(case_);
+    setFullChartOpen(true);
+  };
+
+  // Helper functions for vitals
+  const getBPStatus = (bp: string) => {
+    // Accepts '120/80' format
+    const [sys, dia] = bp.split('/').map(Number);
+    if (!sys || !dia) return 'unknown';
+    if (sys > 120 || dia > 80) return 'high';
+    if (sys < 90 || dia < 60) return 'low';
+    return 'normal';
+  };
+  const getPulseStatus = (pulse: string) => {
+    const p = Number(pulse);
+    if (!p) return 'unknown';
+    if (p < 60) return 'low';
+    if (p > 100) return 'high';
+    return 'normal';
+  };
+  const getTempStatus = (temp: string) => {
+    // Accepts '99.2°F' or '37.5°C'
+    const t = parseFloat(temp);
+    if (temp.includes('C')) {
+      if (t < 36.1) return 'low'; // 97.0°F = 36.1°C
+      if (t > 37.2) return 'high'; // 99.0°F = 37.2°C
+      return 'normal';
+    } else {
+      if (t < 97.0) return 'low';
+      if (t > 99.0) return 'high';
+      return 'normal';
+    }
+  };
+  const getSpO2Status = (spo2: string) => {
+    const s = Number(spo2.replace('%', ''));
+    if (!s) return 'unknown';
+    if (s < 95) return 'low';
+    return 'normal';
+  };
+  const vitalRanges = {
+    bp: '90/60–120/80 mmHg',
+    pulse: '60–100 bpm',
+    temp: '97.0–99.0°F (36.1–37.2°C)',
+    spo2: '95–100%'
+  };
+
+  const handleOpenTransferDialog = (case_: EmergencyCase) => {
+    setTransferCase(case_);
+    setTransferHospital("");
+    setTransferReason("");
+    setTransferNotes("");
+    setTransferError(null);
+    setTransferDialogOpen(true);
+  };
+
+  const handleTransferCase = async () => {
+    if (!transferHospital || !transferReason) {
+      setTransferError("Please select a hospital and enter a reason.");
+      return;
+    }
+    setTransferLoading(true);
+    setTransferError(null);
+    try {
+      // Placeholder API call (replace with your backend endpoint)
+      await api.put(`/emergency/${transferCase?.id}/transfer`, {
+        transferTo: transferHospital,
+        transferReason,
+        transferNotes,
+      });
+      setTransferDialogOpen(false);
+      setTransferCase(null);
+      fetchCases();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setTransferError(err.message);
+      } else {
+        setTransferError("Failed to transfer case");
+      }
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  const handleOpenVitalsDialog = (case_: EmergencyCase) => {
+    setVitalsCase(case_);
+    setVitalsBP(case_.vitals.bp || "");
+    setVitalsPulse(case_.vitals.pulse || "");
+    setVitalsTemp(case_.vitals.temp || "");
+    setVitalsSpO2(case_.vitals.spo2 || "");
+    setVitalsError(null);
+    setVitalsDialogOpen(true);
+  };
+
+  const handleUpdateVitals = async () => {
+    setVitalsLoading(true);
+    setVitalsError(null);
+    try {
+      await api.put(`/emergency/${vitalsCase?.id}`, {
+        vitals: {
+          bp: vitalsBP,
+          pulse: vitalsPulse,
+          temp: vitalsTemp,
+          spo2: vitalsSpO2,
+        },
+      });
+      setVitalsDialogOpen(false);
+      setVitalsCase(null);
+      fetchCases();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setVitalsError(err.message);
+      } else {
+        setVitalsError("Failed to update vitals");
+      }
+    } finally {
+      setVitalsLoading(false);
+    }
+  };
+
+  // Filter cases based on selectedPriority
+  const filteredCases = selectedPriority === "all"
+    ? emergencyCases
+    : emergencyCases.filter(c => c.triagePriority.toLowerCase() === selectedPriority);
+
   return (
     <div className="p-6 space-y-6">
+      {loading && <div>Loading emergency cases...</div>}
+      {error && <div className="text-red-500">{error}</div>}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Siren className="h-8 w-8 text-red-500" />
           <h1 className="text-3xl font-bold text-gray-900">Emergency Department</h1>
         </div>
-        <Dialog>
+        <Dialog open={registerDialogOpen} onOpenChange={setRegisterDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-red-500 hover:bg-red-600">
               <Plus className="h-4 w-4 mr-2" />
@@ -144,50 +431,77 @@ const Emergency = () => {
             </DialogHeader>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Input placeholder="Patient Name" />
-                <Input placeholder="Age" type="number" />
+                <div>
+                  <label className="text-sm font-medium">Patient Name <span className="text-red-500">*</span></label>
+                  <Input placeholder="Patient Name" value={registerForm.patientName} onChange={e => handleRegisterInput('patientName', e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Age <span className="text-red-500">*</span></label>
+                  <Input placeholder="Age" type="number" value={registerForm.age} onChange={e => handleRegisterInput('age', e.target.value)} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input placeholder="Phone Number" />
+                <div>
+                  <label className="text-sm font-medium">Gender <span className="text-red-500">*</span></label>
+                  <Select value={registerForm.gender} onValueChange={v => handleRegisterInput('gender', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Phone Number <span className="text-red-500">*</span></label>
+                  <Input placeholder="Phone Number" value={registerForm.phone} onChange={e => handleRegisterInput('phone', e.target.value)} />
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium">Chief Complaint</label>
-                <Textarea placeholder="Describe the main symptoms or condition..." />
+                <Textarea placeholder="Describe the main symptoms or condition..." value={registerForm.chiefComplaint} onChange={e => handleRegisterInput('chiefComplaint', e.target.value)} />
               </div>
               <div>
-                <label className="text-sm font-medium">Triage Priority</label>
-                <Select>
+                <label className="text-sm font-medium">Triage Priority <span className="text-red-500">*</span></label>
+                <Select value={registerForm.triagePriority} onValueChange={v => handleRegisterInput('triagePriority', v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select Priority" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="critical">Critical (Red)</SelectItem>
-                    <SelectItem value="high">High (Orange)</SelectItem>
-                    <SelectItem value="medium">Medium (Yellow)</SelectItem>
-                    <SelectItem value="low">Low (Green)</SelectItem>
+                    <SelectItem value="Critical">Critical (Red)</SelectItem>
+                    <SelectItem value="High">High (Orange)</SelectItem>
+                    <SelectItem value="Medium">Medium (Yellow)</SelectItem>
+                    <SelectItem value="Low">Low (Green)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-4 gap-4">
-                <Input placeholder="BP" />
-                <Input placeholder="Pulse" />
-                <Input placeholder="Temperature" />
-                <Input placeholder="SpO2" />
+                <div>
+                  <Input placeholder="BP" value={registerForm.bp} onChange={e => handleRegisterInput('bp', e.target.value)} />
+                  <div className="text-xs text-gray-500 mt-1">BP (mmHg), normal: 90/60–120/80</div>
+                </div>
+                <div>
+                  <Input placeholder="Pulse" value={registerForm.pulse} onChange={e => handleRegisterInput('pulse', e.target.value)} />
+                  <div className="text-xs text-gray-500 mt-1">Pulse (bpm), normal:<br /> 60–100</div>
+                </div>
+                <div>
+                  <Input placeholder="Temperature" value={registerForm.temp} onChange={e => handleRegisterInput('temp', e.target.value)} />
+                  <div className="text-xs text-gray-500 mt-1">Temp (°F or °C), normal: 97.0–99.0°F</div>
+                </div>
+                <div>
+                  <Input placeholder="SpO₂" value={registerForm.spo2} onChange={e => handleRegisterInput('spo2', e.target.value)} />
+                  <div className="text-xs text-gray-500 mt-1">Oxygen Saturation (%), normal: 95–100%</div>
+                </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline">Cancel</Button>
-                <Button className="bg-red-500 hover:bg-red-600">Register Case</Button>
+                <Button variant="outline" onClick={() => setRegisterDialogOpen(false)}>Cancel</Button>
+                <Button className="bg-red-500 hover:bg-red-600" onClick={handleRegisterCase} disabled={registerLoading}>
+                  {registerLoading ? 'Registering...' : 'Register Case'}
+                </Button>
               </div>
+              {registerError && <div className="text-red-500 text-sm">{registerError}</div>}
             </div>
           </DialogContent>
         </Dialog>
@@ -233,7 +547,6 @@ const Emergency = () => {
         <TabsList>
           <TabsTrigger value="active">Active Cases</TabsTrigger>
           <TabsTrigger value="triage">Triage Protocols</TabsTrigger>
-          <TabsTrigger value="resources">Emergency Resources</TabsTrigger>
         </TabsList>
 
         <TabsContent value="active" className="space-y-4">
@@ -261,7 +574,7 @@ const Emergency = () => {
           </Card>
 
           <div className="grid grid-cols-1 gap-4">
-            {emergencyCases.map((case_) => (
+            {filteredCases.map((case_) => (
               <Card key={case_.id} className="hover:shadow-lg transition-shadow border-l-4 border-l-red-500">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
@@ -333,20 +646,18 @@ const Emergency = () => {
                   </div>
 
                   <div className="mt-4 flex gap-2">
-                    <Button size="sm" className="bg-medical-500 hover:bg-medical-600">
+                    <Button size="sm" className="bg-medical-500 hover:bg-medical-600" onClick={() => handleOpenStatusDialog(case_.id, case_.status)}>
                       Update Status
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => handleOpenFullChart(case_)}>
                       View Full Chart
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => handleOpenTransferDialog(case_)}>
                       Transfer
                     </Button>
-                    {case_.triagePriority === "Critical" && (
-                      <Button size="sm" className="bg-red-500 hover:bg-red-600">
-                        Emergency Protocol
-                      </Button>
-                    )}
+                    <Button variant="outline" size="sm" onClick={() => handleOpenVitalsDialog(case_)}>
+                      Add/Update Vitals
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -397,19 +708,166 @@ const Emergency = () => {
             ))}
           </div>
         </TabsContent>
-
-        <TabsContent value="resources">
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center py-8">
-                <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Emergency Resources</h3>
-                <p className="text-gray-600">Emergency equipment tracking and protocols coming soon.</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
+
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Update Emergency Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select value={newStatus} onValueChange={setNewStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select new status" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setStatusDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleUpdateStatus} disabled={statusLoading || !newStatus} className="bg-blue-500 hover:bg-blue-600">
+                {statusLoading ? "Updating..." : "Update"}
+              </Button>
+            </div>
+            {statusError && <div className="text-red-500 text-sm">{statusError}</div>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={fullChartOpen} onOpenChange={setFullChartOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Full Chart - {fullChartCase?.caseId}</DialogTitle>
+          </DialogHeader>
+          {fullChartCase && (
+            <div className="space-y-6">
+              <div className="mb-2">
+                <div className="font-semibold">{fullChartCase.patientName} ({fullChartCase.age}Y, {fullChartCase.gender})</div>
+              </div>
+              {/* Color Legend */}
+              <div className="flex items-center gap-4 mb-2">
+                <div className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded bg-green-500"></span><span className="text-xs text-gray-700">Normal</span></div>
+                <div className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded bg-red-500"></span><span className="text-xs text-gray-700">High</span></div>
+                <div className="flex items-center gap-1"><span className="inline-block w-4 h-4 rounded bg-yellow-500"></span><span className="text-xs text-gray-700">Low/Abnormal</span></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* BP */}
+                <div className="p-4 rounded shadow bg-white border">
+                  <div className="font-medium mb-1">Blood Pressure (BP)</div>
+                  <div className="flex items-center gap-2">
+                    <div className={`text-lg font-bold ${getBPStatus(fullChartCase.vitals.bp)==='normal' ? 'text-green-600' : getBPStatus(fullChartCase.vitals.bp)==='high' ? 'text-red-600' : 'text-yellow-600'}`}>{fullChartCase.vitals.bp}</div>
+                    <span className="text-xs text-gray-500">Normal: {vitalRanges.bp}</span>
+                  </div>
+                  <div className="h-2 w-full rounded bg-gray-200 mt-2">
+                    <div className={`h-2 rounded ${getBPStatus(fullChartCase.vitals.bp)==='normal' ? 'bg-green-500' : getBPStatus(fullChartCase.vitals.bp)==='high' ? 'bg-red-500' : 'bg-yellow-500'}`} style={{width:'100%'}}></div>
+                  </div>
+                </div>
+                {/* Pulse */}
+                <div className="p-4 rounded shadow bg-white border">
+                  <div className="font-medium mb-1">Pulse</div>
+                  <div className="flex items-center gap-2">
+                    <div className={`text-lg font-bold ${getPulseStatus(fullChartCase.vitals.pulse)==='normal' ? 'text-green-600' : getPulseStatus(fullChartCase.vitals.pulse)==='high' ? 'text-red-600' : 'text-yellow-600'}`}>{fullChartCase.vitals.pulse}</div>
+                    <span className="text-xs text-gray-500">Normal: {vitalRanges.pulse}</span>
+                  </div>
+                  <div className="h-2 w-full rounded bg-gray-200 mt-2">
+                    <div className={`h-2 rounded ${getPulseStatus(fullChartCase.vitals.pulse)==='normal' ? 'bg-green-500' : getPulseStatus(fullChartCase.vitals.pulse)==='high' ? 'bg-red-500' : 'bg-yellow-500'}`} style={{width:'100%'}}></div>
+                  </div>
+                </div>
+                {/* Temp */}
+                <div className="p-4 rounded shadow bg-white border">
+                  <div className="font-medium mb-1">Temperature</div>
+                  <div className="flex items-center gap-2">
+                    <div className={`text-lg font-bold ${getTempStatus(fullChartCase.vitals.temp)==='normal' ? 'text-green-600' : getTempStatus(fullChartCase.vitals.temp)==='high' ? 'text-red-600' : 'text-yellow-600'}`}>{fullChartCase.vitals.temp}</div>
+                    <span className="text-xs text-gray-500">Normal: {vitalRanges.temp}</span>
+                  </div>
+                  <div className="h-2 w-full rounded bg-gray-200 mt-2">
+                    <div className={`h-2 rounded ${getTempStatus(fullChartCase.vitals.temp)==='normal' ? 'bg-green-500' : getTempStatus(fullChartCase.vitals.temp)==='high' ? 'bg-red-500' : 'bg-yellow-500'}`} style={{width:'100%'}}></div>
+                  </div>
+                </div>
+                {/* SpO2 */}
+                <div className="p-4 rounded shadow bg-white border">
+                  <div className="font-medium mb-1">SpO2</div>
+                  <div className="flex items-center gap-2">
+                    <div className={`text-lg font-bold ${getSpO2Status(fullChartCase.vitals.spo2)==='normal' ? 'text-green-600' : 'text-yellow-600'}`}>{fullChartCase.vitals.spo2}</div>
+                    <span className="text-xs text-gray-500">Normal: {vitalRanges.spo2}</span>
+                  </div>
+                  <div className="h-2 w-full rounded bg-gray-200 mt-2">
+                    <div className={`h-2 rounded ${getSpO2Status(fullChartCase.vitals.spo2)==='normal' ? 'bg-green-500' : 'bg-yellow-500'}`} style={{width:'100%'}}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transfer Emergency Case</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Destination Hospital</label>
+              <Select value={transferHospital} onValueChange={setTransferHospital}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select hospital" />
+                </SelectTrigger>
+                <SelectContent>
+                  {transferHospitals.map((hosp) => (
+                    <SelectItem key={hosp.value} value={hosp.value}>{hosp.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Reason for Transfer</label>
+              <Textarea placeholder="Enter reason for transfer..." value={transferReason} onChange={e => setTransferReason(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Additional Notes (optional)</label>
+              <Textarea placeholder="Any additional notes..." value={transferNotes} onChange={e => setTransferNotes(e.target.value)} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setTransferDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleTransferCase} disabled={transferLoading || !transferHospital || !transferReason} className="bg-blue-500 hover:bg-blue-600">
+                {transferLoading ? "Transferring..." : "Transfer"}
+              </Button>
+            </div>
+            {transferError && <div className="text-red-500 text-sm">{transferError}</div>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Vitals Dialog */}
+      <Dialog open={vitalsDialogOpen} onOpenChange={setVitalsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add/Update Vitals</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Input placeholder="BP (e.g. 120/80)" value={vitalsBP} onChange={e => setVitalsBP(e.target.value)} />
+              <Input placeholder="Pulse (bpm)" value={vitalsPulse} onChange={e => setVitalsPulse(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input placeholder="Temperature (°F or °C)" value={vitalsTemp} onChange={e => setVitalsTemp(e.target.value)} />
+              <Input placeholder="SpO2 (%)" value={vitalsSpO2} onChange={e => setVitalsSpO2(e.target.value)} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setVitalsDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleUpdateVitals} disabled={vitalsLoading} className="bg-blue-500 hover:bg-blue-600">
+                {vitalsLoading ? "Saving..." : "Save Vitals"}
+              </Button>
+            </div>
+            {vitalsError && <div className="text-red-500 text-sm">{vitalsError}</div>}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

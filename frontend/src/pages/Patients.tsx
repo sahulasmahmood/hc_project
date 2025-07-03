@@ -38,6 +38,7 @@ interface Patient {
   emergencyPhone: string;
   visibleId: string;
   address: string;
+  createdFromEmergency?: boolean;
 }
 
 const Patients = () => {
@@ -167,6 +168,11 @@ const Patients = () => {
                     <CardTitle className="text-lg">
                       {patient.name}
                       <span className="ml-2 text-xs text-gray-500 font-mono">{patient.visibleId}</span>
+                      {patient.createdFromEmergency && (
+                        <Badge className="ml-2 bg-red-100 text-red-700 border-red-300" variant="outline">
+                          Emergency
+                        </Badge>
+                      )}
                     </CardTitle>
                     <div className="flex items-center gap-2">
                       <Badge className={getStatusColor(patient.status)}>

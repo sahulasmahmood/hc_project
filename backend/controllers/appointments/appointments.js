@@ -95,6 +95,10 @@ const createAppointment = async (req, res) => {
 
     // Check maximum appointments per day limit
     const appointmentSettings = await prisma.appointmentSettings.findFirst();
+    if (!appointmentSettings) {
+      return res.status(400).json({ error: 'Please configure appointment settings before creating appointments.' });
+    }
+
     if (appointmentSettings) {
       // Count existing appointments for the same date
       const existingAppointmentsCount = await prisma.appointment.count({

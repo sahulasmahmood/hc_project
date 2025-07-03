@@ -92,7 +92,8 @@ const createPatient = async (req, res) => {
       emergencyContact,
       emergencyPhone,
       address,
-      abhaId
+      abhaId,
+      createdFromEmergency = false
     } = req.body;
 
     // Validate required fields
@@ -188,7 +189,8 @@ const createPatient = async (req, res) => {
         emergencyPhone,
         address,
         abhaId,
-        status: 'Active'
+        status: 'Active',
+        createdFromEmergency,
       }
     });
 
