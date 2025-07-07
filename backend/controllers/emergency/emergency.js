@@ -20,14 +20,7 @@ const getAllEmergencyCases = async (req, res) => {
       gender: c.patient?.gender || '',
       phone: c.patient?.phone || '',
       chiefComplaint: c.chiefComplaint,
-      arrivalTime: c.arrivalTime.toLocaleString('en-IN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      }),
+      arrivalTime: c.arrivalTime.toISOString(),
       triagePriority: c.triagePriority,
       assignedTo: c.assignedTo,
       status: c.status,
@@ -69,14 +62,7 @@ const getEmergencyCaseById = async (req, res) => {
       gender: c.patient?.gender || '',
       phone: c.patient?.phone || '',
       chiefComplaint: c.chiefComplaint,
-      arrivalTime: c.arrivalTime.toLocaleString('en-IN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      }),
+      arrivalTime: c.arrivalTime.toISOString(),
       triagePriority: c.triagePriority,
       assignedTo: c.assignedTo,
       status: c.status,
@@ -235,6 +221,217 @@ const transferEmergencyCase = async (req, res) => {
   }
 };
 
+// Atomic registration: patient, appointment, emergency case
+const registerEmergencyCase = async (req, res) => {
+  const prisma = new (require('../../generated/prisma').PrismaClient)();
+  const {
+    patient, // { name, age, gender, phone, ... }
+    appointment, // { type, duration, ... }
+    emergencyCase // { chiefComplaint, triagePriority, ... }
+  } = req.body;
+
+  // Validate required fields for patient
+  if (!patient || !patient.name || !patient.age || !patient.gender || !patient.phone) {
+    return res.status(400).json({ error: 'Missing required patient fields' });
+  }
+  // Validate required fields for emergency case
+  if (!emergencyCase || !emergencyCase.chiefComplaint || !emergencyCase.triagePriority) {
+    return res.status(400).json({ error: 'Missing required emergency case fields' });
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Generate visibleId (APL-00001 ... APL-99999, then APL-A-00001 ...)
+      let prefix = "APL";
+      let letter = null;
+      let number = 1;
+      const lastPatient = await tx.patient.findFirst({
+        where: {
+          visibleId: {
+            startsWith: prefix
+          }
+        },
+        orderBy: {
+          visibleId: 'desc'
+        }
+      });
+      if (lastPatient && lastPatient.visibleId) {
+        let match = lastPatient.visibleId.match(/^([A-Z]{3})-(\d{5})$/);
+        if (match) {
+          prefix = match[1];
+          number = parseInt(match[2], 10) + 1;
+          if (number > 99999) {
+            number = 1;
+            letter = 'A';
+          }
+        } else {
+          match = lastPatient.visibleId.match(/^([A-Z]{3})-([A-Z])-(\d{5})$/);
+          if (match) {
+            prefix = match[1];
+            letter = match[2];
+            number = parseInt(match[3], 10) + 1;
+            if (number > 99999) {
+              number = 1;
+              if (letter === 'Z') {
+                let prefixArr = prefix.split('');
+                let i = 2;
+                while (i >= 0) {
+                  if (prefixArr[i] !== 'Z') {
+                    prefixArr[i] = String.fromCharCode(prefixArr[i].charCodeAt(0) + 1);
+                    break;
+                  } else {
+                    prefixArr[i] = 'A';
+                    i--;
+                  }
+                }
+                prefix = prefixArr.join('');
+                letter = 'A';
+              } else {
+                letter = String.fromCharCode(letter.charCodeAt(0) + 1);
+              }
+            }
+          }
+        }
+      }
+      let visibleId = letter
+        ? `${prefix}-${letter}-${String(number).padStart(5, '0')}`
+        : `${prefix}-${String(number).padStart(5, '0')}`;
+
+      // 1. Create patient
+      const createdPatient = await tx.patient.create({
+        data: {
+          visibleId,
+          name: patient.name,
+          age: parseInt(patient.age),
+          gender: patient.gender,
+          phone: patient.phone,
+          email: patient.email,
+          condition: patient.condition,
+          allergies: patient.allergies || [],
+          emergencyContact: patient.emergencyContact,
+          emergencyPhone: patient.emergencyPhone,
+          address: patient.address,
+          abhaId: patient.abhaId,
+          status: 'Active',
+          createdFromEmergency: true,
+        },
+      });
+
+      // Fetch appointment settings for slot assignment
+      const appointmentSettings = await tx.appointmentSettings.findFirst();
+      if (!appointmentSettings) {
+        throw new Error('Appointment settings not configured.');
+      }
+      // Parse timeSlots JSON
+      let timeSlots = appointmentSettings.timeSlots;
+      if (typeof timeSlots === 'string') timeSlots = JSON.parse(timeSlots);
+      // Get today's date string (YYYY-MM-DD)
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      // Find the earliest slot (by time, e.g., '08:00')
+      const sortedSlots = timeSlots
+        .filter(slot => slot.isActive !== false)
+        .sort((a, b) => a.time.localeCompare(b.time));
+      if (!sortedSlots.length) throw new Error('No active time slots configured.');
+      const earliestSlot = sortedSlots[0];
+      // Helper to parse 12-hour time (e.g., '01:00 PM') to 24-hour
+      function parseTimeTo24Hour(timeStr) {
+        const [time, period] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+        if (period === 'PM' && hours !== 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+        return { hours, minutes };
+      }
+      // Get slot duration in minutes from appointment settings
+      let slotDurationMinutes;
+      let appointmentDuration;
+
+      // Always use defaultDuration for emergency appointments
+      if (appointmentSettings.defaultDuration) {
+        const parsed = parseInt(appointmentSettings.defaultDuration);
+        if (!isNaN(parsed)) {
+          slotDurationMinutes = parsed;
+          appointmentDuration = appointmentSettings.defaultDuration;
+        }
+      }
+      if (!slotDurationMinutes || !appointmentDuration) {
+        throw new Error('No valid appointment duration found in settings.');
+      }
+      // Map slots to Date objects for today, with start and end
+      const todaySlots = sortedSlots.map(slot => {
+        const { hours, minutes } = parseTimeTo24Hour(slot.time);
+        const slotStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+        const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60000);
+        return { ...slot, slotStart, slotEnd };
+      });
+      // --- New logic: split each slot into two halves for emergency assignment ---
+      let chosenSlot;
+      let slotDate;
+      let slotTime;
+      // Find the slot where now is between slotStart and slotEnd
+      const currentSlotIndex = todaySlots.findIndex(slot => now >= slot.slotStart && now < slot.slotEnd);
+      if (currentSlotIndex !== -1) {
+        const slot = todaySlots[currentSlotIndex];
+        const midpoint = new Date(slot.slotStart.getTime() + (slotDurationMinutes / 2) * 60000);
+        if (now < midpoint) {
+          // First half: assign current slot
+          chosenSlot = slot;
+        } else {
+          // Second half: assign next slot if available, else last slot
+          chosenSlot = todaySlots[currentSlotIndex + 1] || todaySlots[todaySlots.length - 1];
+        }
+      } else {
+        // If not in any slot, use the next future slot, or last slot if none
+        const nextSlot = todaySlots.find(slot => slot.slotStart > now);
+        chosenSlot = nextSlot || todaySlots[todaySlots.length - 1];
+      }
+      slotDate = chosenSlot.slotStart;
+      slotTime = chosenSlot.time;
+
+      // 2. Create appointment (double booking allowed for emergencies)
+      const createdAppointment = await tx.appointment.create({
+        data: {
+          patientId: createdPatient.id,
+          patientName: createdPatient.name,
+          patientPhone: createdPatient.phone,
+          date: slotDate,
+          time: slotTime,
+          type: appointment?.type || 'Emergency',
+          duration: appointmentDuration, // Use dynamic duration
+          status: appointment?.status || 'Confirmed',
+          notes: appointment?.notes || `Auto-created for emergency (${emergencyCase.triagePriority})`,
+        },
+      });
+      // 3. Create emergency case
+      const createdCase = await tx.emergencyCase.create({
+        data: {
+          patientId: createdPatient.id,
+          chiefComplaint: emergencyCase.chiefComplaint,
+          arrivalTime: emergencyCase.arrivalTime ? new Date(emergencyCase.arrivalTime) : now,
+          triagePriority: emergencyCase.triagePriority,
+          assignedTo: emergencyCase.assignedTo || 'Unassigned',
+          status: emergencyCase.status || 'Waiting',
+          vitals: emergencyCase.vitals || {},
+          appointmentId: createdAppointment.id,
+        },
+        include: { patient: true, appointment: true },
+      });
+
+      // 4. Update appointment to reference emergency case
+      await tx.appointment.update({
+        where: { id: createdAppointment.id },
+        data: { emergencyCaseId: createdCase.id },
+      });
+
+      return createdCase;
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('Atomic emergency registration failed:', error);
+    res.status(500).json({ error: error?.message || 'Failed to register emergency case' });
+  }
+};
+
 module.exports = {
   getAllEmergencyCases,
   getEmergencyCaseById,
@@ -242,4 +439,5 @@ module.exports = {
   updateEmergencyCase,
   deleteEmergencyCase,
   transferEmergencyCase,
+  registerEmergencyCase,
 };

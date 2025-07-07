@@ -641,44 +641,6 @@ const Appointments = () => {
         </div>
       )}
 
-      {/* Time Slots */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Available Time Slots</CardTitle>
-          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-md px-4 py-2 my-2">
-            <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
-            <span className="text-sm font-medium text-blue-800">Click an <span className="font-semibold underline">available time slot</span> below to schedule a new appointment.</span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {settingsLoading ? (
-            <div className="text-center py-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-500 mx-auto"></div>
-              <p className="mt-2 text-gray-600">Loading time slots...</p>
-            </div>
-          ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-            {allTimeSlots.map((time) => {
-              const status = getSlotStatus(time);
-              return (
-                <Button
-                  key={time}
-                  variant="outline"
-                  size="sm"
-                  className={`text-center border ${getSlotColor(status)}`}
-                  onClick={() => status === 'available' && handleTimeSlotClick(time)}
-                  disabled={status !== 'available'}
-                >
-                  {time}
-                  {status === 'booked' && <span className="ml-2 text-xs">(Booked)</span>}
-                  {status === 'unavailable' && <span className="ml-2 text-xs">(Unavailable)</span>}
-                </Button>
-              );
-            })}
-          </div>
-          )}
-        </CardContent>
-      </Card>
       {/* AppointmentDialog for slot booking */}
       {slotToBook && (
         <AppointmentDialog
@@ -745,6 +707,45 @@ const Appointments = () => {
           </AlertDialogContent>
         </AlertDialog>
       )}
+
+      {/* Time Slots */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Available Time Slots</CardTitle>
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-md px-4 py-2 my-2">
+            <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
+            <span className="text-sm font-medium text-blue-800">Click an <span className="font-semibold underline">available time slot</span> below to schedule a new appointment.</span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {settingsLoading ? (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-medical-500 mx-auto"></div>
+              <p className="mt-2 text-gray-600">Loading time slots...</p>
+            </div>
+          ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {allTimeSlots.map((time) => {
+              const status = getSlotStatus(time);
+              return (
+                <Button
+                  key={time}
+                  variant="outline"
+                  size="sm"
+                  className={`text-center border ${getSlotColor(status)}`}
+                  onClick={() => status === 'available' && handleTimeSlotClick(time)}
+                  disabled={status !== 'available'}
+                >
+                  {time}
+                  {status === 'booked' && <span className="ml-2 text-xs">(Booked)</span>}
+                  {status === 'unavailable' && <span className="ml-2 text-xs">(Unavailable)</span>}
+                </Button>
+              );
+            })}
+          </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

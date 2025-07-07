@@ -87,6 +87,7 @@ const AppointmentSettings = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [newAppointmentType, setNewAppointmentType] = useState("");
+  const [newDurationValue, setNewDurationValue] = useState("");
 
   useEffect(() => {
     loadSettings();
@@ -196,19 +197,29 @@ const AppointmentSettings = () => {
   };
 
   const addDuration = () => {
-    const newValue = prompt("Enter duration value (in minutes):");
-    const newLabel = prompt("Enter duration label (e.g., '30 minutes'):");
-    
-    if (newValue && newLabel) {
+    if (
+      newDurationValue.trim() &&
+      !settings.durations.some((d) => d.value === newDurationValue)
+    ) {
+      const valueNum = parseInt(newDurationValue, 10);
+      let label = "";
+      if (valueNum < 60) {
+        label = `${valueNum} minute${valueNum === 1 ? "" : "s"}`;
+      } else if (valueNum % 60 === 0) {
+        label = `${valueNum / 60} hour${valueNum === 60 ? "" : "s"}`;
+      } else {
+        label = `${(valueNum / 60).toFixed(1)} hours`;
+      }
       const newDur: Duration = {
-        value: newValue,
-        label: newLabel,
-        isActive: true
+        value: newDurationValue,
+        label,
+        isActive: true,
       };
       setSettings({
         ...settings,
-        durations: [...settings.durations, newDur]
+        durations: [...settings.durations, newDur],
       });
+      setNewDurationValue("");
     }
   };
 
@@ -450,7 +461,19 @@ const AppointmentSettings = () => {
         {/* Durations */}
         <div className="space-y-6 pb-2">
           <h3 className="text-lg font-semibold mb-2">Appointment Durations</h3>
+          <div className="text-sm text-gray-500 mb-2">
+            Enter duration in <b>minutes</b> (e.g., <b>15</b> for 15 minutes, <b>60</b> for 1 hour).<br />
+            <span className="text-xs text-gray-400">Do not enter '1' for 1 hour; use '60' instead.</span>
+          </div>
           <div className="flex gap-3">
+            <Input
+              placeholder="Value (min)"
+              value={newDurationValue}
+              onChange={(e) => setNewDurationValue(e.target.value.replace(/[^0-9]/g, ""))}
+              className="w-32"
+              type="number"
+              min="1"
+            />
             <Button onClick={addDuration} size="sm" variant="outline">
               <Plus className="h-4 w-4 mr-2" />
               Add Duration
@@ -459,7 +482,7 @@ const AppointmentSettings = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {settings.durations.map((duration) => (
               <div key={duration.value} className="flex items-center gap-2">
-                <Badge 
+                <Badge
                   variant={duration.isActive ? "default" : "secondary"}
                   className="flex-1 cursor-pointer"
                   onClick={() => toggleDuration(duration.value)}

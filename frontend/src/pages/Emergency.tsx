@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertTriangle, Plus, Clock, User, Phone, MapPin, Activity, Siren, Heart, Zap } from "lucide-react";
 import api from "@/lib/api";
+import axios, { AxiosError } from 'axios';
 
 const statusOptions = [
   "Waiting",
@@ -89,6 +90,10 @@ const Emergency = () => {
   const [vitalsSpO2, setVitalsSpO2] = useState("");
   const [vitalsLoading, setVitalsLoading] = useState(false);
   const [vitalsError, setVitalsError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+  });
 
   const fetchCases = async () => {
     setLoading(true);
@@ -143,53 +148,41 @@ const Emergency = () => {
     setRegisterLoading(true);
     setRegisterError(null);
     try {
-      // Create patient
-      const patientRes = await api.post('/patients', {
-        name: registerForm.patientName,
-        age: ageNum,
-        gender: registerForm.gender,
-        phone: registerForm.phone,
-        status: 'Active',
-        allergies: [],
-        createdFromEmergency: true,
-      });
-      const patientId = patientRes.data.id;
-      // Determine appointment time based on triage priority
       const now = new Date();
-      let appointmentTime = now;
-      // For demo: assign appointment time as now for all priorities
-      // (You can adjust logic for different priorities if needed)
-      // Format time as HH:mm:ss (include seconds to avoid unique constraint collisions)
       const pad = (n: number) => n.toString().padStart(2, '0');
       const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-      // Create appointment (double-booking allowed for emergencies)
-      const appointmentRes = await api.post('/appointments', {
-        patientId,
-        patientName: registerForm.patientName,
-        patientPhone: registerForm.phone,
-        date: now.toISOString().split('T')[0],
-        time: timeStr,
-        type: 'Emergency',
-        duration: '30',
-        status: 'Confirmed',
-        notes: `Auto-created for emergency (${registerForm.triagePriority})`,
-      });
-      const appointmentId = appointmentRes.data.id;
-      // Create emergency case
-      await api.post('/emergency', {
-        patientId,
-        chiefComplaint: registerForm.chiefComplaint,
-        arrivalTime: now.toISOString(),
-        triagePriority: registerForm.triagePriority,
-        assignedTo: registerForm.assignedTo || 'Unassigned',
-        status: registerForm.status || 'Waiting',
-        vitals: {
-          bp: registerForm.bp,
-          pulse: registerForm.pulse,
-          temp: registerForm.temp,
-          spo2: registerForm.spo2,
+      // Call atomic registration endpoint
+      await api.post('/emergency/register', {
+        patient: {
+          name: registerForm.patientName,
+          age: ageNum,
+          gender: registerForm.gender,
+          phone: registerForm.phone,
+          status: 'Active',
+          allergies: [],
+          createdFromEmergency: true,
         },
-        appointmentId,
+        appointment: {
+          date: now.toISOString().split('T')[0],
+          time: timeStr,
+          type: 'Emergency',
+          duration: '30',
+          status: 'Confirmed',
+          notes: `Auto-created for emergency (${registerForm.triagePriority})`,
+        },
+        emergencyCase: {
+          chiefComplaint: registerForm.chiefComplaint,
+          arrivalTime: now.toISOString(),
+          triagePriority: registerForm.triagePriority,
+          assignedTo: registerForm.assignedTo || 'Unassigned',
+          status: registerForm.status || 'Waiting',
+          vitals: {
+            bp: registerForm.bp,
+            pulse: registerForm.pulse,
+            temp: registerForm.temp,
+            spo2: registerForm.spo2,
+          },
+        },
       });
       setRegisterDialogOpen(false);
       setRegisterForm({
@@ -197,7 +190,9 @@ const Emergency = () => {
       });
       fetchCases();
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (axios.isAxiosError(err) && err.response && err.response.data && err.response.data.error) {
+        setRegisterError(err.response.data.error);
+      } else if (err instanceof Error) {
         setRegisterError(err.message);
       } else {
         setRegisterError('Failed to register emergency case and appointment');
@@ -291,12 +286,21 @@ const Emergency = () => {
 
   // Helper functions for vitals
   const getBPStatus = (bp: string) => {
-    // Accepts '120/80' format
-    const [sys, dia] = bp.split('/').map(Number);
-    if (!sys || !dia) return 'unknown';
-    if (sys > 120 || dia > 80) return 'high';
-    if (sys < 90 || dia < 60) return 'low';
-    return 'normal';
+    // Accepts '120/80' or single value like '140'
+    const parts = bp.split('/').map(Number);
+    if (parts.length === 1 || !parts[1]) {
+      const sys = parts[0];
+      if (!sys) return 'unknown';
+      if (sys >= 130) return 'high';
+      if (sys < 90) return 'low';
+      return 'normal';
+    } else {
+      const [sys, dia] = parts;
+      if (!sys || !dia) return 'unknown';
+      if (sys >= 130 || dia >= 80) return 'high';
+      if (sys < 90 || dia < 60) return 'low';
+      return 'normal';
+    }
   };
   const getPulseStatus = (pulse: string) => {
     const p = Number(pulse);
@@ -404,10 +408,26 @@ const Emergency = () => {
     }
   };
 
-  // Filter cases based on selectedPriority
-  const filteredCases = selectedPriority === "all"
-    ? emergencyCases
-    : emergencyCases.filter(c => c.triagePriority.toLowerCase() === selectedPriority);
+  // Filter cases based on selectedPriority and selectedDate
+  const filteredCases = emergencyCases.filter(c => {
+    const caseDate = c.arrivalTime.split('T')[0];
+    const matchesDate = caseDate === selectedDate;
+    const matchesPriority = selectedPriority === "all" || c.triagePriority.toLowerCase() === selectedPriority;
+    return matchesDate && matchesPriority;
+  });
+
+  // Helper to format ISO string to local date/time string
+  function formatLocalDateTime(isoString: string) {
+    const date = new Date(isoString);
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -460,7 +480,7 @@ const Emergency = () => {
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium">Chief Complaint</label>
+                <label className="text-sm font-medium">Chief Complaint <span className="text-red-500">*</span></label>
                 <Textarea placeholder="Describe the main symptoms or condition..." value={registerForm.chiefComplaint} onChange={e => handleRegisterInput('chiefComplaint', e.target.value)} />
               </div>
               <div>
@@ -569,6 +589,15 @@ const Emergency = () => {
                   <AlertTriangle className="h-4 w-4 mr-2" />
                   Emergency Alert
                 </Button>
+                <div className="ml-auto">
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={e => setSelectedDate(e.target.value)}
+                    className="border rounded px-2 py-1"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -601,7 +630,7 @@ const Emergency = () => {
                     <div className="text-right space-y-1">
                       <div className="flex items-center gap-2 text-sm">
                         <Clock className="h-4 w-4 text-gray-500" />
-                        <span>{case_.arrivalTime}</span>
+                        <span>{formatLocalDateTime(case_.arrivalTime)}</span>
                       </div>
                       <div className="text-sm text-gray-600">
                         Assigned to: {case_.assignedTo}

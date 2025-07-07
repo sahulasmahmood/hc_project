@@ -7,6 +7,7 @@ const {
   updateEmergencyCase,
   deleteEmergencyCase,
   transferEmergencyCase,
+  registerEmergencyCase,
 } = require('../controllers/emergency/emergency');
 
 // Get all emergency cases
@@ -26,5 +27,8 @@ router.put('/:id/transfer', transferEmergencyCase);
 
 // Delete emergency case
 router.delete('/:id', deleteEmergencyCase);
+
+// Atomic registration: patient, appointment, emergency case
+router.post('/register', registerEmergencyCase);
 
 module.exports = router;

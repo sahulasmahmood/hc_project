@@ -12,7 +12,8 @@ const getAllPatients = async (req, res) => {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
           { condition: { contains: search, mode: 'insensitive' } },
-          { abhaId: { contains: search } }
+          { abhaId: { contains: search } },
+          { phone: { contains: search } }
         ]
       };
     }

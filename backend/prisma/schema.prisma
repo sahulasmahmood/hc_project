@@ -15,49 +15,48 @@ datasource db {
 }
 
 model Appointment {
-  id               Int      @id @default(autoincrement())
+  id               Int            @id @default(autoincrement())
   patientId        Int? // Making this optional for existing records
-  patient          Patient? @relation(fields: [patientId], references: [id])
+  patient          Patient?       @relation(fields: [patientId], references: [id])
   patientName      String
   patientPhone     String
   patientVisibleId String?
   date             DateTime
   time             String
-  type             String   @default("Consultation")
-  duration         String   @default("30")
-  status           String   @default("Confirmed")
-  notes            String?  @db.Text
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  type             String         @default("Consultation")
+  duration         String
+  status           String         @default("Confirmed")
+  notes            String?        @db.Text
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
   emergencyCase    EmergencyCase?
   emergencyCaseId  Int?
 
-  @@unique([date, time])
   @@index([patientId])
 }
 
 model Patient {
-  id               Int           @id @default(autoincrement())
-  visibleId        String        @unique
-  name             String        @db.VarChar(100)
-  age              Int
-  gender           String        @db.VarChar(20)
-  phone            String        @db.VarChar(20)
-  email            String?       @db.VarChar(100)
-  condition        String?       @db.VarChar(200)
-  status           String        @default("Active") @db.VarChar(50)
-  allergies        String[]
-  lastVisit        DateTime?
-  abhaId           String?       @unique @db.VarChar(50)
-  abhaVerified     Boolean       @default(false)
-  emergencyContact String?       @db.VarChar(100)
-  emergencyPhone   String?       @db.VarChar(20)
-  address          String?       @db.Text
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  appointments     Appointment[]
-  emergencyCases   EmergencyCase[]
-  createdFromEmergency Boolean   @default(false)
+  id                   Int             @id @default(autoincrement())
+  visibleId            String          @unique
+  name                 String          @db.VarChar(100)
+  age                  Int
+  gender               String          @db.VarChar(20)
+  phone                String          @db.VarChar(20)
+  email                String?         @db.VarChar(100)
+  condition            String?         @db.VarChar(200)
+  status               String          @default("Active") @db.VarChar(50)
+  allergies            String[]
+  lastVisit            DateTime?
+  abhaId               String?         @unique @db.VarChar(50)
+  abhaVerified         Boolean         @default(false)
+  emergencyContact     String?         @db.VarChar(100)
+  emergencyPhone       String?         @db.VarChar(20)
+  address              String?         @db.Text
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  appointments         Appointment[]
+  emergencyCases       EmergencyCase[]
+  createdFromEmergency Boolean         @default(false)
 }
 
 model AppointmentSettings {
@@ -106,6 +105,7 @@ model EmailConfiguration {
 
 model InventoryItem {
   id            Int       @id @default(autoincrement())
+  code          String    @unique
   name          String
   category      String
   currentStock  Int
@@ -122,24 +122,24 @@ model InventoryItem {
 }
 
 model EmergencyCase {
-  id            Int        @id @default(autoincrement())
-  patientId     Int
-  patient       Patient    @relation(fields: [patientId], references: [id])
+  id             Int          @id @default(autoincrement())
+  patientId      Int
+  patient        Patient      @relation(fields: [patientId], references: [id])
   chiefComplaint String
-  arrivalTime   DateTime
+  arrivalTime    DateTime
   triagePriority String
-  assignedTo    String
-  status        String
-  vitals        Json
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
-  appointmentId Int? @unique
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  transferStatus String    @default("Not Transferred")
-  transferTo      String?
-  transferReason  String?
-  transferNotes   String?
-  transferTime    DateTime?
+  assignedTo     String
+  status         String
+  vitals         Json
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+  appointmentId  Int?         @unique
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  transferStatus String       @default("Not Transferred")
+  transferTo     String?
+  transferReason String?
+  transferNotes  String?
+  transferTime   DateTime?
 
   @@index([patientId])
   @@index([appointmentId])

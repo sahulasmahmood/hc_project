@@ -76,10 +76,10 @@ const createAppointment = async (req, res) => {
     const [year, month, day] = date.split('-').map(Number);
     const appointmentDate = new Date(year, month - 1, day); // month is 0-indexed
     // Parse time string (e.g., '10:30 AM') to set hours and minutes
-    let slotDurationMinutes = 30; // default fallback
+    let slotDurationMinutes;
     if (duration) {
       slotDurationMinutes = parseInt(duration);
-      if (isNaN(slotDurationMinutes)) slotDurationMinutes = 30;
+      if (isNaN(slotDurationMinutes)) throw new Error('Invalid or missing slot duration.');
     }
     if (time) {
       const [timePart, period] = time.split(' ');
@@ -314,7 +314,8 @@ const rescheduleAppointment = async (req, res) => {
     appointmentDate.setHours(hours, minutes, 0, 0);
 
     // Validate: Prevent scheduling in the past
-    const slotDurationMinutes = parseInt(currentAppointment.duration) || 30;
+    const slotDurationMinutes = parseInt(currentAppointment.duration);
+    if (isNaN(slotDurationMinutes)) throw new Error('Invalid or missing slot duration.');
     const slotEnd = new Date(appointmentDate.getTime() + slotDurationMinutes * 60000);
     if (slotEnd < new Date()) {
       return res.status(400).json({ error: 'Cannot reschedule to a time in the past.' });
