@@ -49,7 +49,33 @@ const InventoryFormDialog = ({ item, onSuccess, trigger }: InventoryFormDialogPr
 
   const { toast } = useToast();
 
-  const categories = ["Medicine", "Equipment", "Supplies", "Consumables"];
+  const [categories, setCategories] = useState<string[]>([]);
+  const [suppliers, setSuppliers] = useState<string[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+
+  // Fetch categories and suppliers
+  const fetchFormData = async () => {
+    try {
+      setLoadingData(true);
+      const [categoriesRes, suppliersRes] = await Promise.all([
+        api.get("/settings/categories"),
+        api.get("/settings/suppliers")
+      ]);
+      setCategories(categoriesRes.data.map((cat: any) => cat.name));
+      setSuppliers(suppliersRes.data.map((sup: any) => sup.name));
+    } catch (error) {
+      console.error("Error fetching form data:", error);
+      // Fallback to static data if API fails
+      setCategories(["Medicine", "Equipment", "Supplies", "Consumables"]);
+      setSuppliers([]);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFormData();
+  }, []);
 
   useEffect(() => {
     if (item) {
@@ -178,13 +204,23 @@ const InventoryFormDialog = ({ item, onSuccess, trigger }: InventoryFormDialogPr
             </div>
             <div className="space-y-2">
               <Label htmlFor="supplier">Supplier *</Label>
-              <Input
-                id="supplier"
-                value={formData.supplier}
-                onChange={(e) => handleInputChange("supplier", e.target.value)}
-                placeholder="Enter supplier name"
-                required
-              />
+              <Select value={formData.supplier} onValueChange={(value) => handleInputChange("supplier", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier} value={supplier}>
+                      {supplier}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {suppliers.length === 0 && (
+                <p className="text-xs text-gray-500">
+                  No suppliers found. Please add suppliers in Settings → Inventory.
+                </p>
+              )}
             </div>
           </div>
 

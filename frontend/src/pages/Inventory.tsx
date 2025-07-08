@@ -9,6 +9,7 @@ import api from "@/lib/api";
 import InventoryFormDialog from "@/components/inventory/InventoryFormDialog";
 import StockUpdateDialog from "@/components/inventory/StockUpdateDialog";
 import DeleteConfirmDialog from "@/components/inventory/DeleteConfirmDialog";
+import RestockDialog from "@/components/inventory/RestockDialog";
 
 interface InventoryItem {
   id: number;
@@ -36,7 +37,23 @@ const Inventory = () => {
   const [error, setError] = useState<string | null>(null);
   const isInitialMount = useRef(true);
 
-  const categories = ["Medicine", "Equipment", "Supplies", "Consumables"];
+  const [categories, setCategories] = useState<string[]>([]);
+
+  // Fetch categories
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get("/settings/categories");
+      setCategories(response.data.map((cat: any) => cat.name));
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      // Fallback to static data if API fails
+      setCategories(["Medicine", "Equipment", "Supplies", "Consumables"]);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   // Fetch inventory data
   const fetchInventory = async (search?: string, category?: string) => {
@@ -330,15 +347,9 @@ const Inventory = () => {
                   </div>
 
                   <div className="flex gap-2 pt-4 border-t">
-                    <StockUpdateDialog 
+                    <RestockDialog 
                       item={item} 
                       onSuccess={fetchInventory}
-                      trigger={
-                        <Button variant="outline" size="sm">
-                          <TrendingUp className="h-4 w-4 mr-1" />
-                          Restock
-                        </Button>
-                      }
                     />
                     <StockUpdateDialog 
                       item={item} 

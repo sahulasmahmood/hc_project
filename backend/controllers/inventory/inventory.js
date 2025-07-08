@@ -1,20 +1,20 @@
 const { PrismaClient } = require('../../generated/prisma');
 const prisma = new PrismaClient();
 
-// Helper: Get prefix for category
-function getCategoryPrefix(category) {
-  switch ((category || '').toLowerCase()) {
-    case 'medicine': return 'MED';
-    case 'equipment': return 'EQP';
-    case 'supplies': return 'SUP';
-    case 'consumables': return 'CON';
-    default: return 'OTH'; // Other
-  }
+// Helper: Get dynamic prefix for category
+async function getCategoryPrefix(category) {
+  // Validate category exists and is active
+  const cat = await prisma.inventoryCategory.findFirst({
+    where: { name: category, isActive: true }
+  });
+  if (!cat) throw new Error('Invalid or inactive category');
+  // Use first 3 uppercase letters of category name as prefix
+  return category.substring(0, 3).toUpperCase();
 }
 
 // Helper: Generate next code for category
 async function generateNextCode(category) {
-  const prefix = getCategoryPrefix(category);
+  const prefix = await getCategoryPrefix(category);
   // Find the highest code for this category
   const lastItem = await prisma.inventoryItem.findFirst({
     where: {
@@ -24,7 +24,7 @@ async function generateNextCode(category) {
   });
   let nextNumber = 1;
   if (lastItem && lastItem.code) {
-    const match = lastItem.code.match(/^(\w+)-(\d{3})$/);
+    const match = lastItem.code.match(/^([A-Z]{3})-(\d{3})$/);
     if (match) {
       nextNumber = parseInt(match[2], 10) + 1;
     }
@@ -84,17 +84,21 @@ const getInventoryItemById = async (req, res) => {
 const createInventoryItem = async (req, res) => {
   try {
     const data = req.body;
-    
     // Validate required fields
     if (!data.name || !data.category || !data.unit || !data.supplier) {
       return res.status(400).json({ 
         error: "Missing required fields: name, category, unit, and supplier are required" 
       });
     }
-    
+    // Validate category exists and is active
+    const cat = await prisma.inventoryCategory.findFirst({
+      where: { name: data.category, isActive: true }
+    });
+    if (!cat) {
+      return res.status(400).json({ error: "Selected category does not exist or is inactive" });
+    }
     // Generate unique code for this category
     const code = await generateNextCode(data.category);
-    
     // Set default values for optional fields
     const itemData = {
       ...data,
@@ -106,11 +110,13 @@ const createInventoryItem = async (req, res) => {
       lastRestocked: data.lastRestocked ? new Date(data.lastRestocked) : new Date(),
       expiryDate: data.expiryDate ? new Date(data.expiryDate) : null
     };
-    
     const item = await prisma.inventoryItem.create({ data: itemData });
     console.log(`Created inventory item: ${item.name} (${item.code})`);
     res.status(201).json(item);
   } catch (error) {
+    if (error.message === 'Invalid or inactive category') {
+      return res.status(400).json({ error: "Selected category does not exist or is inactive" });
+    }
     console.error('Error creating inventory item:', error);
     res.status(500).json({ error: "Failed to create inventory item" });
   }
@@ -121,7 +127,15 @@ const updateInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
     const data = req.body;
-    
+    // Validate category if provided
+    if (data.category) {
+      const cat = await prisma.inventoryCategory.findFirst({
+        where: { name: data.category, isActive: true }
+      });
+      if (!cat) {
+        return res.status(400).json({ error: "Selected category does not exist or is inactive" });
+      }
+    }
     // Convert numeric fields
     const updateData = {
       ...data,
@@ -132,15 +146,16 @@ const updateInventoryItem = async (req, res) => {
       lastRestocked: data.lastRestocked ? new Date(data.lastRestocked) : undefined,
       expiryDate: data.expiryDate ? new Date(data.expiryDate) : undefined
     };
-    
     const item = await prisma.inventoryItem.update({
       where: { id: parseInt(id) },
       data: updateData,
     });
-    
     console.log(`Updated inventory item: ${item.name} (${item.code})`);
     res.json(item);
   } catch (error) {
+    if (error.message === 'Invalid or inactive category') {
+      return res.status(400).json({ error: "Selected category does not exist or is inactive" });
+    }
     console.error('Error updating inventory item:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: "Item not found" });
@@ -175,10 +190,54 @@ const deleteInventoryItem = async (req, res) => {
   }
 };
 
+// RESTOCK inventory item
+const restockInventoryItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { quantity, batchNumber, expiryDate, supplier, date } = req.body;
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ error: "Quantity must be greater than 0" });
+    }
+    if (!batchNumber) {
+      return res.status(400).json({ error: "Batch number is required" });
+    }
+    // Simulate batch number uniqueness check (should be more robust in real app)
+    // For now, always allow
+    const item = await prisma.inventoryItem.findUnique({ where: { id: parseInt(id) } });
+    if (!item) {
+      return res.status(404).json({ error: "Item not found" });
+    }
+    if (expiryDate && new Date(expiryDate) < new Date()) {
+      return res.status(400).json({ error: "Expiry date must be in the future" });
+    }
+    if (date && new Date(date) > new Date()) {
+      return res.status(400).json({ error: "Restock date cannot be in the future" });
+    }
+    if (item.currentStock + parseInt(quantity) > item.maxStock) {
+      return res.status(400).json({ error: `Cannot exceed max stock (${item.maxStock} ${item.unit})` });
+    }
+    const updatedItem = await prisma.inventoryItem.update({
+      where: { id: parseInt(id) },
+      data: {
+        currentStock: item.currentStock + parseInt(quantity),
+        lastRestocked: date ? new Date(date) : new Date(),
+        batchNumber,
+        expiryDate: expiryDate ? new Date(expiryDate) : item.expiryDate,
+        supplier: supplier || item.supplier,
+      },
+    });
+    res.json(updatedItem);
+  } catch (error) {
+    console.error('Error restocking inventory item:', error);
+    res.status(500).json({ error: "Failed to restock inventory item" });
+  }
+};
+
 module.exports = {
   getAllInventoryItems,
   getInventoryItemById,
   createInventoryItem,
   updateInventoryItem,
   deleteInventoryItem,
+  restockInventoryItem,
 };

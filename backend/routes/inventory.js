@@ -7,5 +7,6 @@ router.get('/:id', inventory.getInventoryItemById);
 router.post('/', inventory.createInventoryItem);
 router.put('/:id', inventory.updateInventoryItem);
 router.delete('/:id', inventory.deleteInventoryItem);
+router.post('/:id/restock', inventory.restockInventoryItem);
 
 module.exports = router;

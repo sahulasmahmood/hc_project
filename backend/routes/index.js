@@ -6,6 +6,8 @@ const settingsRouter = require('./settings');
 const hospitalSettingsRouter = require('./hospitalSettings');
 const emergencyRouter = require('./emergency');
 const inventoryRouter = require('./inventory');
+const categoriesRouter = require('./categories');
+const suppliersRouter = require('./suppliers');
 
 // Use appointments routes
 router.use('/', appointmentsRouter);
@@ -14,5 +16,7 @@ router.use('/', settingsRouter);
 router.use('/', hospitalSettingsRouter);
 router.use('/emergency', emergencyRouter);
 router.use('/inventory', inventoryRouter);
+router.use('/settings/categories', categoriesRouter);
+router.use('/settings/suppliers', suppliersRouter);
 
 module.exports = router;

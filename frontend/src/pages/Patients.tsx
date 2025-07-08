@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Search, Phone, Mail, Calendar, Shield, Edit, Stethoscope } from "lucide-react";
 import { 
   Pagination, 
@@ -39,6 +40,7 @@ interface Patient {
   visibleId: string;
   address: string;
   createdFromEmergency?: boolean;
+  createdAt: string;
 }
 
 const Patients = () => {
@@ -48,6 +50,11 @@ const Patients = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [patientsPerPage] = useState(9); // 3x3 grid
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+  });
+  const [filterType, setFilterType] = useState<"lastVisit" | "createdAt" | "all">("lastVisit");
   const navigate = useNavigate();
   const isInitialMount = useRef(true);
 
@@ -87,11 +94,26 @@ const Patients = () => {
     }
   }, [searchTerm]);
 
-  // Calculate pagination
+  // Filter patients based on selectedDate and filterType
+  const filteredPatients = patients.filter(patient => {
+    if (filterType === "all") {
+      return true; // Show all patients
+    } else if (filterType === "lastVisit") {
+      if (!patient.lastVisit) return false; // Skip patients with no last visit
+      const patientDate = patient.lastVisit.split('T')[0];
+      return patientDate === selectedDate;
+    } else {
+      // filterType === "createdAt"
+      const patientDate = patient.createdAt.split('T')[0];
+      return patientDate === selectedDate;
+    }
+  });
+
+  // Calculate pagination for filtered patients
   const indexOfLastPatient = currentPage * patientsPerPage;
   const indexOfFirstPatient = indexOfLastPatient - patientsPerPage;
-  const currentPatients = patients.slice(indexOfFirstPatient, indexOfLastPatient);
-  const totalPages = Math.ceil(patients.length / patientsPerPage);
+  const currentPatients = filteredPatients.slice(indexOfFirstPatient, indexOfLastPatient);
+  const totalPages = Math.ceil(filteredPatients.length / patientsPerPage);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -117,7 +139,14 @@ const Patients = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Users className="h-8 w-8 text-medical-500" />
-          <h1 className="text-3xl font-bold text-gray-900">Patient Management</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Patient Management</h1>
+            {filteredPatients.length !== patients.length && filterType !== "all" && (
+              <p className="text-sm text-gray-600">
+                Showing {filteredPatients.length} of {patients.length} patients by {filterType === "lastVisit" ? "last visit" : "registration"} date: {selectedDate}
+              </p>
+            )}
+          </div>
         </div>
         <PatientFormDialog onSuccess={fetchPatients} />
       </div>
@@ -134,6 +163,33 @@ const Patients = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Select value={filterType} onValueChange={(value: "lastVisit" | "createdAt") => setFilterType(value)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Filter type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Show All Patients</SelectItem>
+                  <SelectItem value="lastVisit">Last Visit Date</SelectItem>
+                  <SelectItem value="createdAt">Registration Date</SelectItem>
+                </SelectContent>
+              </Select>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                className="border rounded px-2 py-1"
+                max={new Date().toISOString().split('T')[0]}
+              />
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                className="text-xs"
+              >
+                Today
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -220,10 +276,19 @@ const Patients = () => {
                       <Mail className="h-4 w-4 text-gray-400" />
                       <span className="truncate">{patient.email}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <span>Last visit: {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'No visits yet'}</span>
-                    </div>
+                                      <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span>Last visit: {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'No visits yet'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span>Registered: {new Date(patient.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                    {patient.createdFromEmergency && (
+                      <Badge className="ml-1 bg-red-100 text-red-700 border-red-300" variant="outline">
+                        Emergency
+                      </Badge>
+                    )}
+                  </div>
                   </div>
                   
                   <div className="pt-2 border-t">
@@ -292,7 +357,7 @@ const Patients = () => {
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                Showing {indexOfFirstPatient + 1} to {Math.min(indexOfLastPatient, patients.length)} of {patients.length} patients
+                Showing {indexOfFirstPatient + 1} to {Math.min(indexOfLastPatient, filteredPatients.length)} of {filteredPatients.length} patients
               </div>
               <Pagination>
                 <PaginationContent>
@@ -329,12 +394,19 @@ const Patients = () => {
       )}
 
       {/* No results */}
-      {!loading && !error && patients.length === 0 && (
+      {!loading && !error && filteredPatients.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
             <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No patients found</h3>
-            <p className="text-gray-600">Try adjusting your search criteria or add a new patient.</p>
+            <p className="text-gray-600">
+              {patients.length === 0 
+                ? "Try adjusting your search criteria or add a new patient."
+                : filterType === "all"
+                ? "No patients found. Try adding a new patient."
+                : `No patients found by ${filterType === "lastVisit" ? "last visit" : "registration"} date (${selectedDate}). Try selecting a different date or filter type.`
+              }
+            </p>
           </CardContent>
         </Card>
       )}
