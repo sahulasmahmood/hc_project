@@ -399,9 +399,6 @@ const Inventory = () => {
                         {item.currentStock <= item.minStock && (
                           <Badge className="bg-red-100 text-red-700 border-red-200">Low Stock</Badge>
                         )}
-                        {isExpiringSoon && (
-                          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Expiring Soon</Badge>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -437,8 +434,15 @@ const Inventory = () => {
                     <div>
                       <div className="text-sm text-gray-600 mb-1">Batch & Expiry</div>
                       <div className="font-medium">{item.batchNumber || 'N/A'}</div>
-                      <div className="text-sm text-gray-500">
-                        {item.expiryDate ? `Exp: ${new Date(item.expiryDate).toLocaleDateString()}` : 'No expiry'}
+                      <div className="text-sm text-gray-500 flex items-center gap-2">
+                        {item.expiryDate ? (
+                          <>
+                            Exp: {new Date(item.expiryDate).toLocaleDateString()}
+                            {isExpiringSoon && (
+                              <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 px-2 py-0.5 text-xs font-semibold">Exp Soon</Badge>
+                            )}
+                          </>
+                        ) : 'No expiry'}
                       </div>
                     </div>
                     
