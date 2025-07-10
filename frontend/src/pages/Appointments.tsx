@@ -642,18 +642,20 @@ const Appointments = () => {
       )}
 
       {/* AppointmentDialog for slot booking */}
-      {slotToBook && (
-        <AppointmentDialog
-          mode="create"
-          onSave={handleSaveAppointment}
-          selectedDate={slotToBook.date}
-          selectedTime={slotToBook.time}
-          onClose={() => {
-            setDialogOpen(false);
-            setSlotToBook(null);
-          }}
-        />
-      )}
+{slotToBook && (
+  <div className="flex justify-end w-full">
+    <AppointmentDialog
+      mode="create"
+      onSave={handleSaveAppointment}
+      selectedDate={slotToBook.date}
+      selectedTime={slotToBook.time}
+      onClose={() => {
+        setDialogOpen(false);
+        setSlotToBook(null);
+      }}
+    />
+  </div>
+)}
       {dialogOpen && !slotToBook && (
         <AppointmentDialog
           mode="create"

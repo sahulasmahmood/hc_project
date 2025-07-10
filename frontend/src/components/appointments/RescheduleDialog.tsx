@@ -215,7 +215,7 @@ const RescheduleDialog = ({ appointment, isOpen, onClose, onReschedule }: Resche
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-medical-500" />
@@ -224,10 +224,10 @@ const RescheduleDialog = ({ appointment, isOpen, onClose, onReschedule }: Resche
         </DialogHeader>
         
         <div className="space-y-6">
-          {/* Current Appointment Info */}
+          {/* Current Appointment Info - now two columns */}
           <div className="bg-blue-50 p-4 rounded-lg">
             <h4 className="font-medium text-blue-900 mb-2">Current Appointment</h4>
-            <div className="space-y-1 text-sm">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
               <p><span className="font-medium">Patient:</span> {appointment.patientName}</p>
               <p><span className="font-medium">Date:</span> {format(new Date(appointment.date), 'PPP')}</p>
               <p><span className="font-medium">Time:</span> {appointment.time}</p>
@@ -309,7 +309,7 @@ const RescheduleDialog = ({ appointment, isOpen, onClose, onReschedule }: Resche
                     variant={selectedTime === time ? "default" : "outline"}
                     size="sm"
                     onClick={() => setSelectedTime(time)}
-                    className="text-xs"
+                    className="text-xs whitespace-nowrap"
                   >
                     {time}
                   </Button>

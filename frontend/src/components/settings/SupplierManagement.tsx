@@ -102,11 +102,15 @@ const SupplierManagement = () => {
         notes: ""
       });
       fetchSuppliers();
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error saving supplier:", error);
+      let errorMessage = "Failed to save supplier";
+      if (error && typeof error === "object" && "response" in error && (error as { response?: { data?: { error?: string } } }).response?.data?.error) {
+        errorMessage = (error as { response: { data: { error: string } } }).response.data.error;
+      }
       toast({
         title: "Error",
-        description: error.response?.data?.error || "Failed to save supplier",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -134,10 +138,14 @@ const SupplierManagement = () => {
         description: `Supplier '${supplier.name}' has been restored`,
       });
       fetchSuppliers();
-    } catch (error: any) {
+    } catch (error) {
+      let errorMessage = "Failed to restore supplier";
+      if (error && typeof error === "object" && "response" in error && (error as { response?: { data?: { error?: string } } }).response?.data?.error) {
+        errorMessage = (error as { response: { data: { error: string } } }).response.data.error;
+      }
       toast({
         title: "Error",
-        description: error.response?.data?.error || "Failed to restore supplier",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -159,10 +167,19 @@ const SupplierManagement = () => {
       setDeleteDialogOpen(false);
       setSupplierToDelete(null);
       fetchSuppliers();
-    } catch (error: any) {
+    } catch (error) {
+      let errorMessage = "Failed to make supplier inactive";
+      if (
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        (error as { response?: { data?: { error?: string } } }).response?.data?.error
+      ) {
+        errorMessage = (error as { response: { data: { error: string } } }).response.data.error.replace('delete supplier', 'make supplier inactive');
+      }
       toast({
         title: "Error",
-        description: error.response?.data?.error?.replace('delete supplier', 'make supplier inactive') || "Failed to make supplier inactive",
+        description: errorMessage,
         variant: "destructive",
       });
     }

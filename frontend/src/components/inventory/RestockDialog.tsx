@@ -31,6 +31,7 @@ const RestockDialog = ({ item, onSuccess, trigger }: RestockDialogProps) => {
   const [expiryDate, setExpiryDate] = useState("");
   const [supplier, setSupplier] = useState(item.supplier || "");
   const [date, setDate] = useState("");
+  const [reason, setReason] = useState(""); // <-- Add reason state
   const { toast } = useToast();
   const [supplierOptions, setSupplierOptions] = useState<string[]>([]);
 
@@ -98,6 +99,7 @@ const RestockDialog = ({ item, onSuccess, trigger }: RestockDialogProps) => {
         expiryDate: expiryDate || undefined,
         supplier: supplier || undefined,
         date: date || undefined,
+        reason: reason || undefined, // <-- Include reason in payload
       });
       toast({
         title: "Restocked",
@@ -109,6 +111,7 @@ const RestockDialog = ({ item, onSuccess, trigger }: RestockDialogProps) => {
       setExpiryDate("");
       setSupplier(item.supplier || "");
       setDate(new Date().toISOString().slice(0, 10));
+      setReason(""); // <-- Reset reason
       onSuccess();
     } catch (error) {
       toast({
@@ -137,10 +140,10 @@ const RestockDialog = ({ item, onSuccess, trigger }: RestockDialogProps) => {
             <DialogTitle>Restock - {item.name}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Compact Current Stock Display */}
             <div className="space-y-2">
-              <Label>Current Stock</Label>
               <div className="text-lg font-medium">
-                {item.currentStock} {item.unit}
+                Current Stock: {item.currentStock} {item.unit}
               </div>
             </div>
             <div className="space-y-2">
@@ -232,6 +235,15 @@ const RestockDialog = ({ item, onSuccess, trigger }: RestockDialogProps) => {
                 </TooltipTrigger>
                 <TooltipContent>Defaults to today. Cannot be in the future.</TooltipContent>
               </Tooltip>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reason">Reason</Label>
+              <Input
+                id="reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Enter reason for restocking (optional)"
+              />
             </div>
             <div className="text-xs text-gray-500 mt-1">
               Current stock: {item.currentStock} {item.unit} | Max: {item.maxStock} {item.unit}

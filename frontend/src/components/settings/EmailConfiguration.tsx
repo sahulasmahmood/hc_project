@@ -179,12 +179,16 @@ const EmailConfiguration: React.FC = () => {
     const fetchEmailConfig = async () => {
       try {
         setLoading(true);
-        const response = await api.get("/email-configuration");
+        const response = await api.get("/settings/email-configuration");
         if (response.data.success && response.data.emailConfig) {
           setFormData(response.data.emailConfig);
         }
-      } catch (err: any) {
-        setError(err.message || "Failed to load email configuration");
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message || "Failed to load email configuration");
+        } else {
+          setError("Failed to load email configuration");
+        }
       } finally {
         setLoading(false);
       }
@@ -217,15 +221,24 @@ const EmailConfiguration: React.FC = () => {
     e.preventDefault();
     try {
       setSaveLoading(true);
-      const response = await api.post("/email-configuration", formData);
+      const response = await api.post("/settings/email-configuration", formData);
       if (response.data.success) {
         toast({
           title: "Success",
           description: "Email configuration saved successfully",
         });
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || "Failed to save settings";
+    } catch (err: unknown) {
+      let errorMessage = "Failed to save settings";
+      type ErrorWithResponse = { response?: { data?: { message?: string } } };
+      if (err && typeof err === "object" && "response" in err) {
+        const errorObj = err as ErrorWithResponse;
+        if (errorObj.response?.data?.message) {
+          errorMessage = errorObj.response.data.message;
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
       setError(errorMessage);
       toast({
         title: "Error",
@@ -250,7 +263,7 @@ const EmailConfiguration: React.FC = () => {
     try {
       setTestLoading(true);
       setError(null);
-      const response = await api.put("/email-configuration", {
+      const response = await api.put("/settings/email-configuration", {
         testEmail: testData.email,
         message: testData.message,
       });
@@ -261,12 +274,19 @@ const EmailConfiguration: React.FC = () => {
           description: "Test email sent successfully",
         });
       }
-    } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.message ||
-        err.response?.data?.details ||
-        err.message ||
-        "Failed to send test email";
+    } catch (err: unknown) {
+      let errorMessage = "Failed to send test email";
+      type ErrorWithResponseDetails = { response?: { data?: { message?: string; details?: string } } };
+      if (err && typeof err === "object" && "response" in err) {
+        const errorObj = err as ErrorWithResponseDetails;
+        if (errorObj.response?.data?.message) {
+          errorMessage = errorObj.response.data.message;
+        } else if (errorObj.response?.data?.details) {
+          errorMessage = errorObj.response.data.details;
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
       setError(errorMessage);
       toast({
         title: "Error",

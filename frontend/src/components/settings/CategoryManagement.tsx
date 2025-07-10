@@ -37,7 +37,7 @@ const CategoryManagement = () => {
       setLoading(true);
       const response = await api.get("/settings/categories?includeInactive=true");
       setCategories(response.data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching categories:", error);
       toast({
         title: "Error",
@@ -84,13 +84,27 @@ const CategoryManagement = () => {
       setEditingCategory(null);
       setFormData({ name: "", description: "" });
       fetchCategories();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error saving category:", error);
-      toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to save category",
-        variant: "destructive",
-      });
+      if (
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        (error as { response?: { data?: { error?: string } } }).response?.data?.error
+      ) {
+        const err = error as { response: { data: { error: string } } };
+        toast({
+          title: "Error",
+          description: err.response.data.error || "Failed to save category",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to save category",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -117,12 +131,26 @@ const CategoryManagement = () => {
         description: `Category '${category.name}' has been restored`,
       });
       fetchCategories();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to restore category",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        (error as { response?: { data?: { error?: string } } }).response?.data?.error
+      ) {
+        const err = error as { response: { data: { error: string } } };
+        toast({
+          title: "Error",
+          description: err.response.data.error || "Failed to restore category",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to restore category",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -142,12 +170,26 @@ const CategoryManagement = () => {
       setDeleteDialogOpen(false);
       setCategoryToDelete(null);
       fetchCategories();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.response?.data?.error?.replace('delete category', 'make category inactive') || "Failed to make category inactive",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        (error as { response?: { data?: { error?: string } } }).response?.data?.error
+      ) {
+        const err = error as { response: { data: { error: string } } };
+        toast({
+          title: "Error",
+          description: err.response.data.error?.replace('delete category', 'make category inactive') || "Failed to make category inactive",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to make category inactive",
+          variant: "destructive",
+        });
+      }
     }
   };
 

@@ -117,8 +117,10 @@ model InventoryItem {
   expiryDate    DateTime? // Nullable for items like equipment
   batchNumber   String?
   lastRestocked DateTime?
+  reason        String? // Reason for last stock update
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  batches InventoryBatch[]
 }
 
 model InventoryCategory {
@@ -131,17 +133,17 @@ model InventoryCategory {
 }
 
 model Supplier {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
   contactPerson String?
-  email       String?
-  phone       String?
-  address     String?
-  website     String?
-  isActive    Boolean  @default(true)
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  email         String?
+  phone         String?
+  address       String?
+  website       String?
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model EmergencyCase {
@@ -166,4 +168,16 @@ model EmergencyCase {
 
   @@index([patientId])
   @@index([appointmentId])
+}
+
+model InventoryBatch {
+  id              Int           @id @default(autoincrement())
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId Int
+  batchNumber     String
+  quantity        Int
+  expiryDate      DateTime?
+  restockedAt     DateTime      @default(now())
+  supplier        String?
+  reason          String?
 }

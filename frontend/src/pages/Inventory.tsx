@@ -5,11 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Package, Search, Filter, AlertTriangle, Truck, Calendar, TrendingDown, TrendingUp, Edit } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import api from "@/lib/api";
 import InventoryFormDialog from "@/components/inventory/InventoryFormDialog";
 import StockUpdateDialog from "@/components/inventory/StockUpdateDialog";
 import DeleteConfirmDialog from "@/components/inventory/DeleteConfirmDialog";
 import RestockDialog from "@/components/inventory/RestockDialog";
+import InventoryBatchHistoryDialog from "@/components/inventory/InventoryBatchHistoryDialog";
 
 interface InventoryItem {
   id: number;
@@ -36,14 +38,21 @@ const Inventory = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isInitialMount = useRef(true);
-
   const [categories, setCategories] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  type FilterType = 'all' | 'lowStock' | 'expiringSoon' | 'lastRestocked' | 'createdAt';
+  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [showLowStockModal, setShowLowStockModal] = useState(false);
+  const [showExpiringModal, setShowExpiringModal] = useState(false);
 
   // Fetch categories
   const fetchCategories = async () => {
     try {
       const response = await api.get("/settings/categories");
-      setCategories(response.data.map((cat: any) => cat.name));
+      type Category = { name: string };
+      setCategories((response.data as Category[]).map((cat) => cat.name));
     } catch (error) {
       console.error("Error fetching categories:", error);
       // Fallback to static data if API fails
@@ -110,6 +119,34 @@ const Inventory = () => {
 
   const totalValue = inventory.reduce((sum, item) => sum + (item.currentStock * item.pricePerUnit), 0);
 
+  // Filter inventory by lastRestocked date if selectedDate is set
+  const filteredInventory = inventory.filter(item => {
+    if (filterType === 'all') return true;
+    if (filterType === 'lowStock') return item.currentStock <= item.minStock;
+    if (filterType === 'expiringSoon') {
+      if (!item.expiryDate) return false;
+      const expiryDate = new Date(item.expiryDate);
+      const thirtyDaysFromNow = new Date();
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+      return expiryDate <= thirtyDaysFromNow;
+    }
+    if (filterType === 'lastRestocked' || filterType === 'createdAt') {
+      if (!selectedDate) return true;
+      const dateField = filterType === 'lastRestocked' ? item.lastRestocked : item.createdAt;
+      if (!dateField) return false;
+      return dateField.split('T')[0] === selectedDate;
+    }
+    return true;
+  });
+  // Pagination logic
+  const totalPages = Math.ceil(filteredInventory.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentInventory = filteredInventory.slice(indexOfFirstItem, indexOfLastItem);
+  const handlePageChange = (page: number) => setCurrentPage(page);
+  // Reset to first page when filter changes
+  useEffect(() => { setCurrentPage(1); }, [selectedDate, selectedCategory, searchQuery, filterType]);
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -172,6 +209,12 @@ const Inventory = () => {
                   {lowStockItems.length > 3 && (
                     <div className="text-sm text-gray-500">
                       +{lowStockItems.length - 3} more items
+                      <button
+                        className="ml-2 text-blue-600 underline hover:text-blue-800"
+                        onClick={() => setShowLowStockModal(true)}
+                      >
+                        Show All
+                      </button>
                     </div>
                   )}
                 </div>
@@ -200,6 +243,12 @@ const Inventory = () => {
                   {expiringItems.length > 3 && (
                     <div className="text-sm text-gray-500">
                       +{expiringItems.length - 3} more items
+                      <button
+                        className="ml-2 text-blue-600 underline hover:text-blue-800"
+                        onClick={() => setShowExpiringModal(true)}
+                      >
+                        Show All
+                      </button>
                     </div>
                   )}
                 </div>
@@ -237,6 +286,55 @@ const Inventory = () => {
                   ))}
                 </SelectContent>
               </Select>
+              {/* Grouped Filter Dropdown */}
+              <Select value={filterType} onValueChange={v => setFilterType(v as FilterType)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue>
+                    {filterType === 'all' && 'Show All'}
+                    {filterType === 'lowStock' && 'Low Stock'}
+                    {filterType === 'expiringSoon' && 'Expiring Soon'}
+                    {filterType === 'lastRestocked' && 'Restock Date'}
+                    {filterType === 'createdAt' && 'Created Date'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="px-2 py-1 text-xs text-gray-500">By Status</div>
+                  <SelectItem value="all">Show All</SelectItem>
+                  <SelectItem value="lowStock">Low Stock</SelectItem>
+                  <SelectItem value="expiringSoon">Expiring Soon</SelectItem>
+                  <div className="px-2 py-1 text-xs text-gray-500">By Date</div>
+                  <SelectItem value="lastRestocked">Restock Date</SelectItem>
+                  <SelectItem value="createdAt">Created Date</SelectItem>
+                </SelectContent>
+              </Select>
+              {/* Show date input only for date filters */}
+              {(filterType === 'lastRestocked' || filterType === 'createdAt') && (
+                <>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={e => setSelectedDate(e.target.value)}
+                    className="border rounded px-2 py-1"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                    className="text-xs"
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedDate("")}
+                    className="text-xs"
+                  >
+                    Clear
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </CardContent>
@@ -263,10 +361,17 @@ const Inventory = () => {
       {/* Inventory List */}
       {!error && !loading && (
         <div className="space-y-4">
-          {inventory.map((item) => {
+          {currentInventory.map((item) => {
             const stockStatus = getStockStatus(item.currentStock, item.minStock, item.maxStock);
             const stockPercentage = (item.currentStock / item.maxStock) * 100;
-            
+            // Expiring soon logic
+            let isExpiringSoon = false;
+            if (item.expiryDate) {
+              const expiryDate = new Date(item.expiryDate);
+              const thirtyDaysFromNow = new Date();
+              thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+              isExpiringSoon = expiryDate <= thirtyDaysFromNow;
+            }
             return (
               <Card key={item.id} className="hover:shadow-lg transition-shadow">
                 <CardContent className="p-6">
@@ -290,9 +395,14 @@ const Inventory = () => {
                       <div className="text-lg font-bold text-gray-900">
                         {item.currentStock} {item.unit}
                       </div>
-                      <Badge className={stockStatus.color}>
-                        {stockStatus.status}
-                      </Badge>
+                      <div className="flex flex-wrap gap-2 justify-end mt-1">
+                        {item.currentStock <= item.minStock && (
+                          <Badge className="bg-red-100 text-red-700 border-red-200">Low Stock</Badge>
+                        )}
+                        {isExpiringSoon && (
+                          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Expiring Soon</Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -361,10 +471,11 @@ const Inventory = () => {
                         </Button>
                       }
                     />
-                    <Button variant="outline" size="sm">
+                  {/*   <Button variant="outline" size="sm">
                       <Truck className="h-4 w-4 mr-1" />
                       Order History
-                    </Button>
+                    </Button> */}
+                    <InventoryBatchHistoryDialog itemId={item.id} />
                     <InventoryFormDialog
                       item={item}
                       onSuccess={fetchInventory}
@@ -388,7 +499,7 @@ const Inventory = () => {
         </div>
       )}
 
-      {!error && !loading && inventory.length === 0 && (
+      {!error && !loading && filteredInventory.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center">
             <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -397,6 +508,82 @@ const Inventory = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Pagination Controls */}
+      {!error && !loading && totalPages > 1 && (
+        <div className="flex justify-center mt-6">
+          <nav role="navigation" aria-label="pagination" className="mx-auto flex w-full justify-center">
+            <ul className="flex flex-row items-center gap-1">
+              <li>
+                <a
+                  href="#"
+                  aria-label="Go to previous page"
+                  className={`gap-1 pl-2.5 px-3 py-2 rounded ${currentPage === 1 ? 'pointer-events-none opacity-50' : 'hover:bg-gray-100'}`}
+                  onClick={e => { e.preventDefault(); if (currentPage > 1) handlePageChange(currentPage - 1); }}
+                >
+                  &lt; Previous
+                </a>
+              </li>
+              {Array.from({ length: totalPages }, (_, i) => (
+                <li key={i + 1}>
+                  <a
+                    href="#"
+                    aria-current={currentPage === i + 1 ? "page" : undefined}
+                    className={`px-3 py-2 rounded ${currentPage === i + 1 ? 'bg-white' : 'hover:bg-gray-100'}`}
+                    onClick={e => { e.preventDefault(); handlePageChange(i + 1); }}
+                  >
+                    {i + 1}
+                  </a>
+                </li>
+              ))}
+              <li>
+                <a
+                  href="#"
+                  aria-label="Go to next page"
+                  className={`gap-1 pr-2.5 px-3 py-2 rounded ${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'hover:bg-gray-100'}`}
+                  onClick={e => { e.preventDefault(); if (currentPage < totalPages) handlePageChange(currentPage + 1); }}
+                >
+                  Next &gt;
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      )}
+
+      {/* Low Stock Modal */}
+      <Dialog open={showLowStockModal} onOpenChange={setShowLowStockModal}>
+        <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>All Low Stock Items</DialogTitle>
+          </DialogHeader>
+          <div className="divide-y">
+            {lowStockItems.map(item => (
+              <div key={item.id} className="py-2 flex justify-between items-center text-sm">
+                <span>{item.name} <span className="text-xs text-gray-400">({item.code})</span></span>
+                <span className="text-xs text-red-600 font-mono">Stock: {item.currentStock}</span>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expiring Soon Modal */}
+      <Dialog open={showExpiringModal} onOpenChange={setShowExpiringModal}>
+        <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>All Expiring Soon Items</DialogTitle>
+          </DialogHeader>
+          <div className="divide-y">
+            {expiringItems.map(item => (
+              <div key={item.id} className="py-2 flex justify-between items-center text-sm">
+                <span>{item.name} <span className="text-xs text-gray-400">({item.code})</span></span>
+                <span className="text-xs text-yellow-600 font-mono">{item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'No expiry'}</span>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

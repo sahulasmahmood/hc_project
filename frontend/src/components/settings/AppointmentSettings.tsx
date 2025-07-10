@@ -142,7 +142,7 @@ const AppointmentSettings = () => {
 
   const loadSettings = async () => {
     try {
-      const response = await api.get("/appointment-settings");
+      const response = await api.get("/settings/appointment-settings");
       if (response.data) {
         setSettings(response.data);
       }
@@ -154,7 +154,7 @@ const AppointmentSettings = () => {
   const saveSettings = async () => {
     setIsLoading(true);
     try {
-      await api.post("/appointment-settings", settings);
+      await api.post("/settings/appointment-settings", settings);
       toast({
         title: "Settings Saved",
         description: "Appointment settings have been updated successfully.",

@@ -23,7 +23,7 @@ export function useHospitalSettings() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get("/hospital-settings");
+      const res = await api.get("/settings/hospital-settings");
       setSettings(res.data || {});
     } catch (err) {
       setError("Failed to load hospital settings");
@@ -36,7 +36,7 @@ export function useHospitalSettings() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.post("/hospital-settings", newSettings);
+      const res = await api.post("/settings/hospital-settings", newSettings);
       setSettings(res.data);
       return true;
     } catch (err) {

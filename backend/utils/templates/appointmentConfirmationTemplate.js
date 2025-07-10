@@ -83,8 +83,7 @@ module.exports = `
                 </div>
             </div>
             <p>If you need to reschedule or cancel your appointment, please contact us at least 24 hours in advance.</p>
-            <p>We look forward to seeing you!</p>
-        </div>
+            </div>
         <div class="footer">
             <p><strong>{{hospitalName}}</strong></p>
             <p>{{hospitalAddress}}</p>

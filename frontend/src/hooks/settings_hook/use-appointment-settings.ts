@@ -139,7 +139,7 @@ export const useAppointmentSettings = () => {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/appointment-settings");
+      const response = await api.get("/settings/appointment-settings");
       if (response.data) {
         setSettings(response.data);
       } else {
@@ -156,7 +156,7 @@ export const useAppointmentSettings = () => {
   const saveSettings = async (newSettings: AppointmentSettings) => {
     try {
       setLoading(true);
-      await api.post("/appointment-settings", newSettings);
+      await api.post("/settings/appointment-settings", newSettings);
       setSettings(newSettings);
       return { success: true };
     } catch (error) {

@@ -38,15 +38,15 @@ const Sidebar = () => {
     { icon: Users, label: "Patients", path: "/patients" },
     { icon: Calendar, label: "Appointments", path: "/appointments" },
     { icon: FileText, label: "Reports", path: "/reports" },
-    { icon: Activity, label: "Health Metrics", path: "/metrics" },
+   /*  { icon: Activity, label: "Health Metrics", path: "/metrics" }, */
     { icon: UserCheck, label: "Staff", path: "/staff" },
     { icon: CreditCard, label: "Billing", path: "/billing" },
     { icon: Package, label: "Inventory", path: "/inventory" },
-    { icon: Building, label: "Ward Management", path: "/ward-management" },
-    { icon: FlaskConical, label: "Laboratory", path: "/laboratory" },
-    { icon: Pill, label: "Pharmacy", path: "/pharmacy" },
+/*     { icon: Building, label: "Ward Management", path: "/ward-management" }, */
+  /*   { icon: FlaskConical, label: "Laboratory", path: "/laboratory" }, */
+/*     { icon: Pill, label: "Pharmacy", path: "/pharmacy" }, */
     { icon: Siren, label: "Emergency", path: "/emergency" },
-    { icon: BarChart3, label: "Analytics", path: "/analytics" },
+/*     { icon: BarChart3, label: "Analytics", path: "/analytics" }, */
     { icon: UserCog, label: "User Management", path: "/user-management" },
     { icon: Settings, label: "Settings", path: "/settings" },
   ];

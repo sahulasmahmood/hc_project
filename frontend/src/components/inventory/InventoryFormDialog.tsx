@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Edit } from "lucide-react";
 import api from "@/lib/api";
@@ -61,8 +61,10 @@ const InventoryFormDialog = ({ item, onSuccess, trigger }: InventoryFormDialogPr
         api.get("/settings/categories"),
         api.get("/settings/suppliers")
       ]);
-      setCategories(categoriesRes.data.map((cat: any) => cat.name));
-      setSuppliers(suppliersRes.data.map((sup: any) => sup.name));
+      type Category = { name: string };
+      type Supplier = { name: string };
+      setCategories((categoriesRes.data as Category[]).map((cat) => cat.name));
+      setSuppliers((suppliersRes.data as Supplier[]).map((sup) => sup.name));
     } catch (error) {
       console.error("Error fetching form data:", error);
       // Fallback to static data if API fails
@@ -161,6 +163,9 @@ const InventoryFormDialog = ({ item, onSuccess, trigger }: InventoryFormDialogPr
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{item ? "Edit Inventory Item" : "Add New Inventory Item"}</DialogTitle>
+          <DialogDescription>
+            {item ? "Edit the details of this inventory item. Update fields as needed and save changes." : "Add a new inventory item to your stock. Fill in all required fields and save."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -175,7 +180,7 @@ const InventoryFormDialog = ({ item, onSuccess, trigger }: InventoryFormDialogPr
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="category">Category *</Label>
+              <Label>Category *</Label>
               <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
@@ -203,7 +208,7 @@ const InventoryFormDialog = ({ item, onSuccess, trigger }: InventoryFormDialogPr
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="supplier">Supplier *</Label>
+              <Label>Supplier *</Label>
               <Select value={formData.supplier} onValueChange={(value) => handleInputChange("supplier", value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select supplier" />

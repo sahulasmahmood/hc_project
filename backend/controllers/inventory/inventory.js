@@ -144,7 +144,8 @@ const updateInventoryItem = async (req, res) => {
       maxStock: data.maxStock !== undefined ? parseInt(data.maxStock) : undefined,
       pricePerUnit: data.pricePerUnit !== undefined ? parseFloat(data.pricePerUnit) : undefined,
       lastRestocked: data.lastRestocked ? new Date(data.lastRestocked) : undefined,
-      expiryDate: data.expiryDate ? new Date(data.expiryDate) : undefined
+      expiryDate: data.expiryDate ? new Date(data.expiryDate) : undefined,
+      reason: data.reason || undefined
     };
     const item = await prisma.inventoryItem.update({
       where: { id: parseInt(id) },
@@ -194,7 +195,7 @@ const deleteInventoryItem = async (req, res) => {
 const restockInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const { quantity, batchNumber, expiryDate, supplier, date } = req.body;
+    const { quantity, batchNumber, expiryDate, supplier, date, reason } = req.body;
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ error: "Quantity must be greater than 0" });
     }
@@ -216,20 +217,53 @@ const restockInventoryItem = async (req, res) => {
     if (item.currentStock + parseInt(quantity) > item.maxStock) {
       return res.status(400).json({ error: `Cannot exceed max stock (${item.maxStock} ${item.unit})` });
     }
+    // Create InventoryBatch record
+    await prisma.inventoryBatch.create({
+      data: {
+        inventoryItemId: item.id,
+        batchNumber,
+        quantity: parseInt(quantity),
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        restockedAt: date ? new Date(date) : new Date(),
+        supplier: supplier || item.supplier,
+        reason: reason || null,
+      },
+    });
+    // Update InventoryItem stock and lastRestocked
     const updatedItem = await prisma.inventoryItem.update({
       where: { id: parseInt(id) },
       data: {
         currentStock: item.currentStock + parseInt(quantity),
         lastRestocked: date ? new Date(date) : new Date(),
-        batchNumber,
+        // Optionally update expiryDate and supplier for legacy/summary
         expiryDate: expiryDate ? new Date(expiryDate) : item.expiryDate,
         supplier: supplier || item.supplier,
+        reason: reason || undefined,
       },
     });
     res.json(updatedItem);
   } catch (error) {
     console.error('Error restocking inventory item:', error);
     res.status(500).json({ error: "Failed to restock inventory item" });
+  }
+};
+
+// GET batch history for an inventory item
+const getInventoryItemBatches = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Order by restockedAt DESC, then by id DESC for stable ordering within same date
+    const batches = await prisma.inventoryBatch.findMany({
+      where: { inventoryItemId: parseInt(id) },
+      orderBy: [
+        { restockedAt: 'desc' },
+        { id: 'desc' },
+      ],
+    });
+    res.json(batches);
+  } catch (error) {
+    console.error('Error fetching inventory batches:', error);
+    res.status(500).json({ error: "Failed to fetch inventory batches" });
   }
 };
 
@@ -240,4 +274,5 @@ module.exports = {
   updateInventoryItem,
   deleteInventoryItem,
   restockInventoryItem,
+  getInventoryItemBatches,
 };
