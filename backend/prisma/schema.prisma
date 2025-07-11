@@ -57,6 +57,7 @@ model Patient {
   appointments         Appointment[]
   emergencyCases       EmergencyCase[]
   createdFromEmergency Boolean         @default(false)
+  medicalReports       MedicalReport[] // New relation
 }
 
 model AppointmentSettings {
@@ -180,4 +181,13 @@ model InventoryBatch {
   restockedAt     DateTime      @default(now())
   supplier        String?
   reason          String?
+}
+
+model MedicalReport {
+  id          Int      @id @default(autoincrement())
+  filePath    String   // Path to uploaded file
+  uploadedAt  DateTime @default(now())
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  patientId   Int
+  description String?  // Optional: description or label for the report
 }
