@@ -9,6 +9,7 @@ const {
   updateABHAStatus,
   getPatientByPhone
 } = require('../controllers/patients/patients');
+const upload = require('../utils/upload');
 
 // Get all patients with optional search
 router.get('/', getAllPatients);
@@ -20,10 +21,10 @@ router.get('/search/by-phone', getPatientByPhone);
 router.get('/:id', getPatientById);
 
 // Create new patient
-router.post('/', createPatient);
+router.post('/', upload.array('medicalReports'), createPatient);
 
 // Update patient
-router.put('/:id', updatePatient);
+router.put('/:id', upload.array('medicalReports'), updatePatient);
 
 // Delete patient
 router.delete('/:id', deletePatient);

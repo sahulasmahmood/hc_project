@@ -29,7 +29,8 @@ const getAllPatients = async (req, res) => {
         appointments: {
           orderBy: { date: 'desc' },
           take: 1
-        }
+        },
+        medicalReports: true
       }
     });
 
@@ -37,7 +38,8 @@ const getAllPatients = async (req, res) => {
     const formattedPatients = patients.map(patient => ({
       ...patient,
       lastVisit: patient.appointments[0]?.date || null,
-      appointments: undefined // Remove appointments from response
+      appointments: undefined, // Remove appointments from response
+      medicalReportCount: patient.medicalReports.length
     }));
 
     res.json(formattedPatients);
@@ -57,7 +59,8 @@ const getPatientById = async (req, res) => {
         appointments: {
           orderBy: { date: 'desc' },
           take: 1
-        }
+        },
+        medicalReports: true
       }
     });
 
@@ -69,7 +72,8 @@ const getPatientById = async (req, res) => {
     const formattedPatient = {
       ...patient,
       lastVisit: patient.appointments[0]?.date || null,
-      appointments: undefined
+      appointments: undefined,
+      medicalReportCount: patient.medicalReports.length
     };
 
     res.json(formattedPatient);
@@ -191,11 +195,35 @@ const createPatient = async (req, res) => {
         address,
         abhaId,
         status: 'Active',
-        createdFromEmergency,
+        createdFromEmergency
       }
     });
 
-    res.status(201).json(patient);
+    // Handle multiple file uploads with notes/types
+    if (req.files && req.files.length > 0) {
+      // Notes may be a string (single) or array (multiple)
+      let notes = req.body.medicalReportNotes || [];
+      if (!Array.isArray(notes)) notes = [notes];
+      for (let i = 0; i < req.files.length; i++) {
+        await prisma.medicalReport.create({
+          data: {
+            filePath: req.files[i].path.replace(/\\/g, '/'),
+            patientId: patient.id,
+            description: notes[i] || null
+          }
+        });
+      }
+    }
+
+    // Return patient with report count
+    const patientWithReports = await prisma.patient.findUnique({
+      where: { id: patient.id },
+      include: { medicalReports: true }
+    });
+    res.status(201).json({
+      ...patientWithReports,
+      medicalReportCount: patientWithReports.medicalReports.length
+    });
   } catch (error) {
     console.error('Error creating patient:', error);
     if (error.code === 'P2002') {
@@ -233,24 +261,51 @@ const updatePatient = async (req, res) => {
       }
     }
 
+    // Prepare update data
+    const updateData = {
+      name,
+      age: age ? parseInt(age) : undefined,
+      gender,
+      phone,
+      email,
+      condition,
+      allergies: processedAllergies,
+      emergencyContact,
+      emergencyPhone,
+      address,
+      status
+    };
+
+    // Update patient info
     const updatedPatient = await prisma.patient.update({
       where: { id: parseInt(id) },
-      data: {
-        name,
-        age: age ? parseInt(age) : undefined,
-        gender,
-        phone,
-        email,
-        condition,
-        allergies: processedAllergies,
-        emergencyContact,
-        emergencyPhone,
-        address,
-        status
-      }
+      data: updateData
     });
 
-    res.json(updatedPatient);
+    // Handle multiple file uploads with notes/types
+    if (req.files && req.files.length > 0) {
+      let notes = req.body.medicalReportNotes || [];
+      if (!Array.isArray(notes)) notes = [notes];
+      for (let i = 0; i < req.files.length; i++) {
+        await prisma.medicalReport.create({
+          data: {
+            filePath: req.files[i].path.replace(/\\/g, '/'),
+            patientId: updatedPatient.id,
+            description: notes[i] || null
+          }
+        });
+      }
+    }
+
+    // Return patient with report count
+    const patientWithReports = await prisma.patient.findUnique({
+      where: { id: updatedPatient.id },
+      include: { medicalReports: true }
+    });
+    res.json({
+      ...patientWithReports,
+      medicalReportCount: patientWithReports.medicalReports.length
+    });
   } catch (error) {
     console.error('Error updating patient:', error);
     if (error.code === 'P2025') {
